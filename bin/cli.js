@@ -58,6 +58,7 @@ let currentApi = null;
 
 // 当前选中的标签
 let currentTab = 0;
+let renderVersion = 0; // 渲染版本号，防止异步内容串
 
 // 标签列表
 const tabs = [
@@ -204,8 +205,12 @@ function findModelPrice(modelId) {
 
 // 清屏并绘制界面
 function drawUI() {
+  // 增加渲染版本号，使旧的异步回调失效
+  renderVersion++;
+
   term.clear();
   term.eraseDisplay();
+  term.moveTo(1, 1);   // 重置光标
 
   // 绘制 Logo - API 橙色
   const startX = 1;
@@ -295,8 +300,8 @@ function drawTabs() {
 function drawContent() {
   const contentStartY = 12;
 
-  // 彻底清空内容区域，避免内容串
-  for (let i = contentStartY; i < term.height - 1; i++) {
+  // 彻底清空内容区域和底部，避免内容串
+  for (let i = contentStartY; i < term.height; i++) {
     term.moveTo(1, i).eraseLineAfter();
   }
 
@@ -326,6 +331,8 @@ function drawContent() {
 
 // 数据看板
 function showDashboard(startY) {
+  const currentVersion = renderVersion; // 保存当前版本号
+
   let y = startY;
   term.moveTo(1, y++, '────────────────────────────────────────────────────────────');
   term.moveTo(1, y++, '  数据看板');
@@ -341,6 +348,11 @@ function showDashboard(startY) {
 
   // 从当前站点实时获取数据
   queryApi(currentApi).then(result => {
+    // 检查版本号，如果已经切换到其他标签，就不显示
+    if (renderVersion !== currentVersion) {
+      return;
+    }
+
     let dashY = startY + 4;
 
     // 清空加载提示
@@ -398,6 +410,8 @@ function showDashboard(startY) {
 
 // 令牌管理
 function showTokenManage(startY) {
+  const currentVersion = renderVersion;
+
   let y = startY;
   term.moveTo(1, y++, '────────────────────────────────────────────────────────────');
   term.moveTo(1, y++, '  令牌管理');
@@ -433,6 +447,7 @@ function showTokenManage(startY) {
   term.moveTo(1, y++, '  正在查询...');
 
   queryApi(currentApi).then(result => {
+    if (renderVersion !== currentVersion) return;
     let y = startY;
     term.moveTo(1, y++, '────────────────────────────────────────────────────────────');
     term.moveTo(1, y++, '  令牌管理');
@@ -492,6 +507,7 @@ function showUsageInfo(startY) {
 
   // 尝试从站点获取
   queryApi(currentApi).then(result => {
+    if (renderVersion !== currentVersion) return;
     let usageY = startY + 4;
 
     // 清空加载提示
@@ -647,6 +663,7 @@ function showCacheHit(startY) {
 
   // 从当前站点实时获取数据
   queryApi(currentApi).then(result => {
+    if (renderVersion !== currentVersion) return;
     let cacheY = startY + 4;
 
     // 清空加载提示
@@ -809,6 +826,7 @@ function showPriceManage(startY) {
 
   // 从当前站点获取模型价格
   queryApi(currentApi).then(result => {
+    if (renderVersion !== currentVersion) return;
     let priceY = startY + 4;
 
     // 清空加载提示
@@ -1126,10 +1144,78 @@ async function login() {
 
 async function checkSiteInCCSwitch(siteUrl) {
   const monitorStats = realtimeMonitor.getStats();
+  console.log('[DEBUG] monitorStats.ccswitch.available:', monitorStats.ccswitch.available);
+
   if (!monitorStats.ccswitch.available) {
+    console.log('[DEBUG] ccswitch 不可用，返回 false');
     return { found: false, recordCount: 0 };
   }
-  return { found: false, recordCount: 0 };
+
+  try {
+    const Database = require('better-sqlite3');
+    const path = require('path');
+    const os = require('os');
+
+    const dbPath = path.join(os.homedir(), '.cc-switch', 'cc-switch.db');
+    console.log('[DEBUG] 数据库路径:', dbPath);
+
+    const db = new Database(dbPath, { readonly: true });
+
+    // 1. 先在 provider_endpoints 中查找匹配的 provider_id
+    const providerStmt = db.prepare(`
+      SELECT provider_id
+      FROM provider_endpoints
+      WHERE url LIKE ?
+    `);
+
+    const providers = providerStmt.all(`%${siteUrl}%`);
+    const providerIds = providers.map(p => p.provider_id);
+    console.log('[DEBUG] 找到的 provider_ids:', providerIds.length);
+
+    // 2. 如果找到了配置的 provider，统计其记录
+    if (providerIds.length > 0) {
+      const placeholders = providerIds.map(() => '?').join(',');
+      const countStmt = db.prepare(`
+        SELECT COUNT(*) as count
+        FROM proxy_request_logs
+        WHERE provider_id IN (${placeholders})
+      `);
+
+      const result = countStmt.get(...providerIds);
+      const count = result ? result.count : 0;
+      console.log('[DEBUG] Provider 记录数:', count);
+
+      if (count > 0) {
+        db.close();
+        return { found: true, recordCount: count };
+      }
+    }
+
+    // 3. 如果没有找到或记录为0，检查所有记录（包括 _session）
+    console.log('[DEBUG] 检查所有记录...');
+    const totalStmt = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM proxy_request_logs
+    `);
+
+    const totalResult = totalStmt.get();
+    const totalCount = totalResult ? totalResult.count : 0;
+    console.log('[DEBUG] 总记录数:', totalCount);
+
+    db.close();
+
+    // 如果有任何记录，就认为可以使用 ccswitch
+    const result = {
+      found: totalCount > 0,
+      recordCount: totalCount
+    };
+    console.log('[DEBUG] 最终返回:', result);
+    return result;
+  } catch (error) {
+    console.error('[DEBUG] 查询 ccswitch 失败:', error.message);
+    console.error('[DEBUG] 错误堆栈:', error.stack);
+    return { found: false, recordCount: 0 };
+  }
 }
 
 async function findAvailablePort(startPort = 8080) {
@@ -1475,11 +1561,11 @@ term.on('mouse', (name, data) => {
 async function start() {
   term.grabInput({ mouse: 'button' });
 
-  // 直接进入登录界面
-  await login();
-
-  // 启动实时监控
+  // 先启动实时监控并立即检查一次
   realtimeMonitor.start();
+
+  // 然后进入登录界面
+  await login();
 }
 
 start().catch(error => {

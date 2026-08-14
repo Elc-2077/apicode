@@ -37,6 +37,7 @@
   "homepage": "https://github.com/yourusername/apistat#readme",
   "dependencies": {
     "axios": "^1.6.0",
+    "better-sqlite3": "^13.0.3",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
     "chalk": "^4.1.2",
