@@ -1,8 +1,23 @@
-# apicode
+# api-code-cli
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/api-code-cli.svg)](https://www.npmjs.com/package/api-code-cli)
 
 🚀 **AI 编码助手 CLI** - 类似 Claude Code 的终端工具，支持读写文件、执行命令
+
+> **注意**：本项目原包名为 `@elc2077/apicode`，现已更名为 `api-code-cli`。  
+> 旧包不再更新，请使用新包名安装。
+
+## 📦 安装
+
+```bash
+npm install -g api-code-cli
+```
+
+安装后运行：
+```bash
+apicode
+```
 
 ## ✨ 特性
 
@@ -14,19 +29,7 @@
 - 📊 **Token 统计** - 实时追踪使用量和成本
 - 🎨 **美观界面** - 清晰的终端 UI
 
-## 📦 安装
-
-```bash
-npm install -g apicode
-```
-
 ## 🚀 快速开始
-
-安装后直接运行：
-
-```bash
-apicode
-```
 
 首次运行会引导你配置 API：
 1. 输入 API Base URL（如 `https://api.openai.com/v1`）
