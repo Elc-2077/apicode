@@ -5,3 +5,11 @@ node_modules/
 .vscode/
 .idea/
 dist/
+
+# 用户配置和数据（不要提交）
+config.json
+usage.db
+records.json
+*.db
+*.db-journal
+.api-usage-tracker/
