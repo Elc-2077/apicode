@@ -1,11 +1,10 @@
 {
-  "name": "apistat",
-  "version": "4.0.0",
-  "description": "智能 API 使用统计工具 - 自动检测数据源或启动代理服务器",
+  "name": "@elc2077/apicode",
+  "version": "1.0.0",
+  "description": "AI 编码助手 CLI - 支持读写文件、搜索代码、执行命令，类似 Claude Code",
   "main": "index.js",
   "bin": {
-    "apistat": "./bin/cli.js",
-    "APISTAT": "./bin/cli.js"
+    "apicode": "bin/cli.js"
   },
   "scripts": {
     "start": "node bin/cli.js",
@@ -13,29 +12,32 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
-    "api",
-    "usage",
-    "tracker",
-    "proxy",
-    "statistics",
+    "ai",
+    "coding",
+    "assistant",
     "cli",
     "openai",
     "anthropic",
     "claude",
+    "deepseek",
     "gpt",
-    "monitoring"
+    "code-editor",
+    "file-tools",
+    "terminal",
+    "automation"
   ],
-  "author": "Your Name",
+  "author": "Elc-2077",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/apistat.git"
+    "url": "git+https://github.com/Elc-2077/apicode.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/apistat/issues"
+    "url": "https://github.com/Elc-2077/apicode/issues"
   },
-  "homepage": "https://github.com/yourusername/apistat#readme",
+  "homepage": "https://github.com/Elc-2077/apicode#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "axios": "^1.6.0",
     "better-sqlite3": "^13.0.3",
     "blessed": "^0.1.81",
@@ -46,6 +48,7 @@
     "dayjs": "^1.11.9",
     "http-proxy": "^1.18.1",
     "inquirer": "^8.2.5",
+    "openai": "^7.4.0",
     "sql.js": "^1.8.0",
     "terminal-kit": "^3.0.1"
   }
