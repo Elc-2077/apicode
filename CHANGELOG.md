@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3] - 2026-08-27
+
+### Changed
+- 🎨 **简化图片读取输出**: read_image 工具结果只显示一行简短确认，不再显示大量灰色 base64 数据
+- 🔒 **增强安全性**: 完善 .gitignore 规则，防止配置文件、测试文件和敏感信息泄露
+
+### Security
+- 确保 API keys 存储在用户目录 (~/.api-usage-tracker/)，永不提交到代码库
+- 添加配置文件、数据库文件、测试文件的忽略规则
+
 ## [1.1.2] - 2026-08-27
 
 ### Fixed
