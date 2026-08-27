@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-08-27
+
+### Fixed
+- 🐛 **重要修复**: 修复 OpenAI 分支图像读取问题
+  - 之前模型收到的是 JSON 字符串而非实际图像数据
+  - 现在正确通过 `user` 消息传递图像内容
+  - 修复重复读取图像文件的性能问题
+  - 模型现在可以正确"看到"并分析图像内容
+
+### Technical Details
+- `agent.js` OpenAI 分支: 使用 `Map` 缓存图像数据，避免重复调用 `executeTool`
+- `tool` 消息只返回文本确认，图像通过单独的 `user` 消息传递
+- 符合 OpenAI API 规范：图像必须在 `user` 消息中以 `image_url` 格式传递
+
 ## [1.1.0] - 2026-08-27
 
 ### Added
