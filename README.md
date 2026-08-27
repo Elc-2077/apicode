@@ -31,21 +31,15 @@ npm install -g api-code-cli
 apicode
 ```
 
-按提示添加你的 API 配置（OpenAI、Anthropic、DeepSeek 等）。
+按提示添加你的 API 配置（OpenAI、Anthropic、DeepSeek 等），即可进入交互式编程助手模式。
 
-### 2. 启动 Agent 模式
-
-```bash
-apicode agent [目录路径]
-```
-
-进入交互式编程助手模式，AI 可以：
+AI 可以：
 - 读取和分析代码
 - 修改文件
 - 执行命令
 - **读取和分析图像** 🆕
 
-### 3. 使用示例
+### 2. 使用示例
 
 #### 代码编写
 
@@ -81,18 +75,6 @@ AI › ⚙ read_image {"path":"design.png"}
 - GIF (.gif)
 - WebP (.webp)
 
-### 支持的视觉模型
-
-**Anthropic Claude:**
-- claude-3-5-sonnet-20241022 ✅
-- claude-3-opus-20240229
-- claude-3-sonnet-20240229
-
-**OpenAI:**
-- gpt-4o ✅
-- gpt-4o-mini
-- gpt-4-turbo
-
 ### 使用场景
 
 1. **UI/UX 设计审查**: 分析设计稿，提供改进建议
@@ -103,8 +85,8 @@ AI › ⚙ read_image {"path":"design.png"}
 ### 示例
 
 ```bash
-# 启动 agent
-apicode agent
+# 启动 apicode
+apicode
 
 # 在对话中
 You › 分析 screenshot.png 中的错误信息
@@ -128,13 +110,16 @@ You › 读取 chart.png 并总结图表中的数据趋势
 ## 📝 命令
 
 ```bash
-# 启动交互式 agent 模式
-apicode agent [目录]
+# 启动交互式编程助手
+apicode
 
 # 更新到最新版本
 apicode update
 
-# 在 agent 模式中的命令
+# 启动代理服务器（可选）
+apicode serve
+
+# 在对话模式中的命令
 /exit    # 退出
 /clear   # 清空对话上下文
 /quit    # 退出（同 /exit）
@@ -197,16 +182,16 @@ MIT License - 详见 [LICENSE](LICENSE)
 ## 🆕 更新日志
 
 ### v1.1.0 (2026-08-27)
-- ✨ 新增图像读取和分析功能
-- 🖼️ 支持 PNG、JPEG、GIF、WebP 格式
-- 🤖 完整支持 Anthropic 和 OpenAI 视觉 API
-- 📝 添加详细文档和测试脚本
+- 新增图像读取和分析功能
+- 支持 PNG、JPEG、GIF、WebP 格式
+- 完整支持 Anthropic 和 OpenAI 视觉 API
+- 添加详细文档和测试脚本
 
 ### v1.0.0
-- 🎉 初始版本发布
-- 📁 文件读写和搜索功能
-- 💻 命令执行功能
-- 🤖 多 API 支持
+- 初始版本发布
+- 文件读写和搜索功能
+- 命令执行功能
+- 多 API 支持
 
 ---
 
