@@ -184,7 +184,27 @@ class Agent {
         if (hooks.onToolStart) hooks.onToolStart({ name: call.function.name, args });
         const result = await executeTool(call.function.name, args, this._ctx(hooks));
         if (hooks.onToolResult) hooks.onToolResult({ name: call.function.name, result });
-        this.messages.push({ role: 'tool', tool_call_id: call.id, content: result });
+
+        // 处理图像结果 - OpenAI 需要特殊格式
+        let toolContent = result;
+        if (call.function.name === 'read_image') {
+          try {
+            const imageData = JSON.parse(result);
+            if (imageData.type === 'image') {
+              // OpenAI 的图像格式
+              toolContent = JSON.stringify({
+                type: 'image_url',
+                image_url: {
+                  url: `data:${imageData.source.media_type};base64,${imageData.source.data}`
+                }
+              });
+            }
+          } catch (e) {
+            // 不是 JSON 或解析失败，保持原样
+          }
+        }
+
+        this.messages.push({ role: 'tool', tool_call_id: call.id, content: toolContent });
       }
     }
     return { content: '（已达到最大步数上限，停止）', usage: this.usage };
@@ -242,7 +262,30 @@ class Agent {
         if (hooks.onToolStart) hooks.onToolStart({ name: tu.name, args: tu.input });
         const result = await executeTool(tu.name, tu.input || {}, this._ctx(hooks));
         if (hooks.onToolResult) hooks.onToolResult({ name: tu.name, result });
-        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: result });
+
+        // 处理图像结果 - Anthropic 原生支持
+        let toolContent = result;
+        if (tu.name === 'read_image') {
+          try {
+            const imageData = JSON.parse(result);
+            if (imageData.type === 'image') {
+              // Anthropic 接受数组格式，包含文本和图像
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: tu.id,
+                content: [
+                  { type: 'text', text: `已读取图像: ${imageData.path}` },
+                  { type: 'image', source: imageData.source }
+                ]
+              });
+              continue;
+            }
+          } catch (e) {
+            // 不是 JSON 或解析失败，保持原样
+          }
+        }
+
+        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: toolContent });
       }
       this.messages.push({ role: 'user', content: toolResults });
     }

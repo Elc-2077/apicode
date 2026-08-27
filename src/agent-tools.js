@@ -107,6 +107,17 @@ const TOOL_SCHEMAS = [
       },
       required: ['command']
     }
+  },
+  {
+    name: 'read_image',
+    description: '读取图像文件并返回 base64 编码的数据，用于视觉分析。支持 PNG、JPEG、GIF、WebP 格式。',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '图像文件路径（相对或绝对）' }
+      },
+      required: ['path']
+    }
   }
 ];
 
@@ -277,6 +288,33 @@ async function executeTool(name, args, ctx = {}) {
           return truncate(`命令退出码 ${e.status ?? '非0'}${e.signal ? ' 信号 ' + e.signal : ''}\n${so || e.message}`);
         }
         return truncate(out || '(无输出)');
+      }
+      case 'read_image': {
+        const p = resolve(args.path);
+        const stat = fs.statSync(p);
+        if (stat.size > 20 * 1024 * 1024) return `图像文件过大(${stat.size} 字节)，仅支持 20MB 以内的图像。`;
+
+        // 读取图像并转为 base64
+        const buffer = fs.readFileSync(p);
+        const base64 = buffer.toString('base64');
+
+        // 检测图像类型
+        const ext = path.extname(p).toLowerCase();
+        let mediaType = 'image/jpeg';
+        if (ext === '.png') mediaType = 'image/png';
+        else if (ext === '.gif') mediaType = 'image/gif';
+        else if (ext === '.webp') mediaType = 'image/webp';
+
+        // 返回一个特殊标记，让 agent 知道这是图像数据
+        return JSON.stringify({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mediaType,
+            data: base64
+          },
+          path: p
+        });
       }
       default:
         return `未知工具: ${name}`;
