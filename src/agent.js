@@ -177,7 +177,10 @@ class Agent {
         return { content: textContent || '', usage: this.usage };
       }
 
-      // 执行工具
+      // 执行工具，缓存图像数据
+      const toolMessages = [];
+      const imageDataCache = new Map(); // 缓存图像数据，避免重复读取
+
       for (const call of toolCalls) {
         let args = {};
         try { args = JSON.parse(call.function.arguments || '{}'); } catch (e) { args = {}; }
@@ -186,25 +189,45 @@ class Agent {
         if (hooks.onToolResult) hooks.onToolResult({ name: call.function.name, result });
 
         // 处理图像结果 - OpenAI 需要特殊格式
-        let toolContent = result;
         if (call.function.name === 'read_image') {
           try {
             const imageData = JSON.parse(result);
             if (imageData.type === 'image') {
-              // OpenAI 的图像格式
-              toolContent = JSON.stringify({
-                type: 'image_url',
-                image_url: {
-                  url: `data:${imageData.source.media_type};base64,${imageData.source.data}`
-                }
-              });
+              // 缓存图像数据供后续使用
+              imageDataCache.set(call.id, imageData);
+              // OpenAI: tool 消息返回文本确认，图像通过 user 消息传递
+              toolMessages.push({ role: 'tool', tool_call_id: call.id, content: `已读取图像: ${imageData.path}` });
+              continue;
             }
           } catch (e) {
             // 不是 JSON 或解析失败，保持原样
           }
         }
 
-        this.messages.push({ role: 'tool', tool_call_id: call.id, content: toolContent });
+        toolMessages.push({ role: 'tool', tool_call_id: call.id, content: result });
+      }
+
+      // 添加所有 tool 消息
+      this.messages.push(...toolMessages);
+
+      // 如果有图像数据，通过 user 消息传递图像内容
+      if (imageDataCache.size > 0) {
+        const userContent = [];
+
+        for (const [callId, imageData] of imageDataCache) {
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${imageData.source.media_type};base64,${imageData.source.data}`
+            }
+          });
+        }
+
+        if (userContent.length > 0) {
+          // 添加文本提示和图像
+          userContent.unshift({ type: 'text', text: '这是你请求读取的图像：' });
+          this.messages.push({ role: 'user', content: userContent });
+        }
       }
     }
     return { content: '（已达到最大步数上限，停止）', usage: this.usage };
