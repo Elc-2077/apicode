@@ -2,6 +2,27 @@ node_modules/
 .DS_Store
 *.log
 .env
+.env.*
 .vscode/
 .idea/
 dist/
+
+# 配置和数据文件
+config.json
+*.db
+*.sqlite
+*.sqlite3
+.api-usage-tracker/
+
+# 测试文件
+test-*.js
+test-*.md
+test-*.png
+test-*.jpg
+*.test.js
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
