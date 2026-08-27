@@ -1,13 +1,31 @@
-node_modules/
-.git/
-.gitignore
+# 开发文件
 *.log
-test/
-tests/
-docs/
-scripts/
-.vscode/
-.idea/
+*.tmp
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
 *.swp
 *.swo
-.DS_Store
+
+# Node
+node_modules
+npm-debug.log
+
+# 测试文件
+test/
+*.test.js
+coverage/
+
+# 文档源文件
+docs/
+
+# 示例和临时文件
+examples/
+temp/
+tmp/

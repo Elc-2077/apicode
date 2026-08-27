@@ -1,12 +1,19 @@
 # api-code-cli
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+🤖 **AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、**读取图像**。
+
 [![npm version](https://img.shields.io/npm/v/api-code-cli.svg)](https://www.npmjs.com/package/api-code-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-🚀 **AI 编码助手 CLI** - 类似 Claude Code 的终端工具，支持读写文件、执行命令
+## ✨ 特性
 
-> **注意**：本项目原包名为 `@elc2077/apicode`，现已更名为 `api-code-cli`。  
-> 旧包不再更新，请使用新包名安装。
+- 📁 **文件操作**: 读写文件、编辑文件、创建目录
+- 🔍 **代码搜索**: 支持 glob 通配符和正则表达式搜索
+- 💻 **命令执行**: 在终端执行 shell 命令
+- 🖼️ **图像读取**: 读取和分析图像（PNG/JPEG/GIF/WebP）- **v1.1.0 新功能**
+- 🤖 **多 API 支持**: OpenAI、Anthropic Claude、DeepSeek 等
+- 🛡️ **安全机制**: 危险操作需用户确认
+- 💬 **交互模式**: 类似 Claude Code 的对话式编程体验
 
 ## 📦 安装
 
@@ -14,140 +21,190 @@
 npm install -g api-code-cli
 ```
 
-安装后运行：
-```bash
-apicode
-```
-
-## ✨ 特性
-
-- 🤖 **多 AI 模型支持** - OpenAI、Claude、DeepSeek 等
-- 📁 **文件操作** - 读写文件、搜索代码、创建目录
-- 🖥️ **终端命令** - 执行 shell 命令（git、npm、构建等）
-- 🔧 **内置工具系统** - list_dir、read_file、write_file、edit_file、run_shell、glob、grep
-- ⚡ **流式输出** - 实时显示 AI 回复，支持 ESC 中断
-- 📊 **Token 统计** - 实时追踪使用量和成本
-- 🎨 **美观界面** - 清晰的终端 UI
-
 ## 🚀 快速开始
 
-首次运行会引导你配置 API：
-1. 输入 API Base URL（如 `https://api.openai.com/v1`）
-2. 输入 API Key
-3. 选择模型（自动从站点获取可用模型列表）
+### 1. 配置 API
 
-配置完成后即可开始对话，AI 可以帮你：
-- 📖 读取和分析代码
-- ✏️ 修改或新建文件
-- 🐛 搜索文件和代码
-- 🖥️ 执行命令（git、npm、构建等）
-
-## 🎮 使用示例
+首次运行时需要配置 API：
 
 ```bash
-# 启动
 apicode
-
-# 让 AI 列出当前目录
-You: 列出当前目录的文件
-
-# 让 AI 读取文件
-You: 读一下 package.json
-
-# 让 AI 修改代码
-You: 把 README.md 里的版本号改成 1.0.0
-
-# 让 AI 执行命令
-You: 运行 npm test
-
-# 让 AI 搜索代码
-You: 在项目里搜索所有用到 axios 的地方
 ```
 
-## ⌨️ 快捷键
+按提示添加你的 API 配置（OpenAI、Anthropic、DeepSeek 等）。
 
-- **ESC** - 中断当前 AI 响应
-- **Ctrl+C** - 退出程序
+### 2. 启动 Agent 模式
 
-## 🔨 对话命令
-
-在对话中输入以下命令：
-
-- `/help` - 显示帮助
-- `/clear` - 清空会话历史
-- `/model [名称]` - 查看或切换模型
-- `/exit` - 退出
-
-## 🛠️ 内置工具
-
-AI 可以调用的工具：
-
-- `list_dir` - 列出目录内容
-- `read_file` - 读取文件
-- `write_file` - 创建或覆盖文件
-- `edit_file` - 精确替换文件内容
-- `create_dir` - 创建目录
-- `run_shell` - 执行终端命令
-- `glob` - 按模式搜索文件（如 `**/*.js`）
-- `grep` - 搜索文件内容（支持正则）
-
-危险操作（写文件、执行命令）会先询问确认：
-```
-🔧 工具调用: run_shell
-  执行命令:
-  $ npm install axios
-
-确认? (y=同意 / n=拒绝 / a=本次全部同意): y
+```bash
+apicode agent [目录路径]
 ```
 
-## 📊 统计功能
+进入交互式编程助手模式，AI 可以：
+- 读取和分析代码
+- 修改文件
+- 执行命令
+- **读取和分析图像** 🆕
 
-每次对话后显示：
+### 3. 使用示例
+
+#### 代码编写
+
 ```
-────────────────────────────────────────────────────────────
- 📊 会话: 1,234 tokens ($0.0037) │ 总计: 45,625 tokens ($0.14)
-────────────────────────────────────────────────────────────
+You › 帮我创建一个 Express 服务器，监听 3000 端口
+AI › ⚙ write_file {"path":"server.js","content":"..."}
+    ✅ 已创建 server.js
 ```
 
-数据存储在本地 SQLite 数据库（`~/.api-usage-tracker/usage.db`）。
+#### 代码搜索
 
-## 🔐 配置文件
+```
+You › 找出所有使用 axios 的文件
+AI › ⚙ grep {"pattern":"require.*axios|import.*axios"}
+    ↳ src/api.js:3: const axios = require('axios');
+```
 
-配置存储在 `~/.api-usage-tracker/config.json`：
+#### **图像分析** 🆕
+
+```
+You › 请读取 design.png 并分析这个设计图的布局
+AI › ⚙ read_image {"path":"design.png"}
+    ↳ 已读取图像: design.png
+    
+    这个设计图展示了一个现代化的 Web 应用界面...
+```
+
+## 🖼️ 图像功能详解
+
+### 支持的格式
+- PNG (.png)
+- JPEG (.jpg, .jpeg)
+- GIF (.gif)
+- WebP (.webp)
+
+### 支持的视觉模型
+
+**Anthropic Claude:**
+- claude-3-5-sonnet-20241022 ✅
+- claude-3-opus-20240229
+- claude-3-sonnet-20240229
+
+**OpenAI:**
+- gpt-4o ✅
+- gpt-4o-mini
+- gpt-4-turbo
+
+### 使用场景
+
+1. **UI/UX 设计审查**: 分析设计稿，提供改进建议
+2. **截图调试**: 描述错误截图中的问题
+3. **图表分析**: 解读数据可视化图表
+4. **代码截图**: 识别和理解代码图片
+
+### 示例
+
+```bash
+# 启动 agent
+apicode agent
+
+# 在对话中
+You › 分析 screenshot.png 中的错误信息
+You › 这个 UI 设计图 design.png 有什么可以改进的地方？
+You › 读取 chart.png 并总结图表中的数据趋势
+```
+
+## 🛠️ 可用工具
+
+| 工具 | 描述 | 危险操作 |
+|------|------|----------|
+| `read_file` | 读取文本文件 | ❌ |
+| `write_file` | 写入/覆盖文件 | ✅ |
+| `edit_file` | 精确替换文件内容 | ✅ |
+| `list_dir` | 列出目录内容 | ❌ |
+| `glob` | 通配符搜索文件 | ❌ |
+| `grep` | 正则搜索文件内容 | ❌ |
+| `run_shell` | 执行 shell 命令 | ✅ |
+| `read_image` 🆕 | 读取和分析图像 | ❌ |
+
+## 📝 命令
+
+```bash
+# 启动交互式 agent 模式
+apicode agent [目录]
+
+# 在 agent 模式中的命令
+/exit    # 退出
+/clear   # 清空对话上下文
+/quit    # 退出（同 /exit）
+```
+
+## ⚙️ 配置
+
+配置文件存储在 `~/.apicode/config.json`
+
+支持多个 API 配置：
 
 ```json
 {
-  "currentAPI": "my-api",
-  "apis": {
-    "my-api": {
+  "apis": [
+    {
+      "name": "OpenAI",
+      "type": "openai",
       "baseUrl": "https://api.openai.com/v1",
-      "apiKey": "sk-...",
-      "model": "gpt-4"
+      "apiKey": "sk-..."
+    },
+    {
+      "name": "Claude",
+      "type": "anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKey": "sk-ant-..."
     }
-  }
+  ]
 }
 ```
 
-可手动编辑或通过交互界面管理。
+## 🔒 安全特性
 
-## 🌟 支持的模型
+危险操作会提示确认：
 
-理论上支持所有 OpenAI 兼容 API 的模型，包括但不限于：
+```
+⚠ 需要确认：write_file
+│ 新建文件: /path/to/file.js
+│ 内容(150 字符, 前 20 行):
+│ const express = require('express');
+│ ...
 
-- OpenAI (GPT-4, GPT-3.5)
-- Anthropic (Claude 3.5 Sonnet, Claude 3 Opus)
-- DeepSeek (DeepSeek-V3, DeepSeek-V4)
-- 其他兼容 OpenAI API 格式的模型
-
-## 📝 许可证
-
-MIT
+执行吗？(y=同意 / n=拒绝 / a=本次全部同意): 
+```
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
-## 📮 联系
+## 📄 许可证
 
-- GitHub: [@Elc-2077](https://github.com/Elc-2077)
-- Issues: [github.com/Elc-2077/apicode/issues](https://github.com/Elc-2077/apicode/issues)
+MIT License - 详见 [LICENSE](LICENSE)
+
+## 🔗 相关链接
+
+- [GitHub 仓库](https://github.com/Elc-2077/apicode)
+- [问题反馈](https://github.com/Elc-2077/apicode/issues)
+- [更新日志](../CHANGELOG.md)
+- [图像功能详细文档](../README-IMAGE-SUPPORT.md)
+
+## 🆕 更新日志
+
+### v1.1.0 (2026-08-27)
+- ✨ 新增图像读取和分析功能
+- 🖼️ 支持 PNG、JPEG、GIF、WebP 格式
+- 🤖 完整支持 Anthropic 和 OpenAI 视觉 API
+- 📝 添加详细文档和测试脚本
+
+### v1.0.0
+- 🎉 初始版本发布
+- 📁 文件读写和搜索功能
+- 💻 命令执行功能
+- 🤖 多 API 支持
+
+---
+
+Made with ❤️ by [Elc-2077](https://github.com/Elc-2077)
