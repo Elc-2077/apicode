@@ -249,6 +249,20 @@ async function startREPL() {
             ui.print(chalk.yellow(`\n🔧 调用工具: ${chalk.bold(name)}`));
           },
           onToolResult: ({ name, result }) => {
+            // 对于图片读取，只显示简短确认信息
+            if (name === 'read_image') {
+              try {
+                const imageData = JSON.parse(result);
+                if (imageData.type === 'image') {
+                  ui.print(chalk.gray(`  已读取图像: ${imageData.path}`));
+                  return;
+                }
+              } catch (e) {
+                // 非图像数据，继续正常显示
+              }
+            }
+
+            // 其他工具显示前3行结果
             const lines = result.split('\n').slice(0, 3);
             ui.print(chalk.gray('  结果: ' + lines.join('\n        ')));
             if (result.split('\n').length > 3) {
