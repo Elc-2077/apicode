@@ -131,6 +131,9 @@ You › 读取 chart.png 并总结图表中的数据趋势
 # 启动交互式 agent 模式
 apicode agent [目录]
 
+# 更新到最新版本
+apicode update
+
 # 在 agent 模式中的命令
 /exit    # 退出
 /clear   # 清空对话上下文

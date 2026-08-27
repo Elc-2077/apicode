@@ -23,6 +23,44 @@ const os = require('os');
 // 解析命令行参数
 const args = process.argv.slice(2);
 
+// 如果是 update 命令，执行自动更新
+if (args[0] === 'update') {
+  const { execSync } = require('child_process');
+
+  console.log(chalk.cyan('\n🔄 正在检查更新...\n'));
+
+  try {
+    // 获取当前版本
+    const packageJson = require('../package.json');
+    const currentVersion = packageJson.version;
+    console.log(chalk.gray(`当前版本: ${currentVersion}`));
+
+    // 获取最新版本
+    const latestVersion = execSync('npm view api-code-cli version', { encoding: 'utf-8' }).trim();
+    console.log(chalk.gray(`最新版本: ${latestVersion}\n`));
+
+    if (currentVersion === latestVersion) {
+      console.log(chalk.green('✓ 已是最新版本！\n'));
+      process.exit(0);
+    }
+
+    console.log(chalk.yellow(`发现新版本 ${latestVersion}，开始更新...\n`));
+
+    // 执行全局更新
+    console.log(chalk.cyan('执行: npm install -g api-code-cli@latest\n'));
+    execSync('npm install -g api-code-cli@latest', { stdio: 'inherit' });
+
+    console.log(chalk.green('\n✓ 更新完成！\n'));
+    process.exit(0);
+  } catch (error) {
+    console.error(chalk.red('\n❌ 更新失败:'), error.message);
+    console.log(chalk.yellow('\n您可以手动执行: npm install -g api-code-cli@latest\n'));
+    process.exit(1);
+  }
+
+  return;
+}
+
 // 如果是 serve 命令，启动代理服务器
 if (args[0] === 'serve') {
   const ProxyServer = require('../src/proxy/server');
