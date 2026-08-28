@@ -1,27 +1,33 @@
 # api-code-cli
 
-🤖 **AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、**读取图像**。
+**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、**读取图像**。
 
 [![npm version](https://img.shields.io/npm/v/api-code-cli.svg)](https://www.npmjs.com/package/api-code-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## ✨ 特性
+##  特性
 
-- 📁 **文件操作**: 读写文件、编辑文件、创建目录
-- 🔍 **代码搜索**: 支持 glob 通配符和正则表达式搜索
-- 💻 **命令执行**: 在终端执行 shell 命令
-- 🖼️ **图像读取**: 读取和分析图像（PNG/JPEG/GIF/WebP）- **v1.1.0 新功能**
-- 🤖 **多 API 支持**: OpenAI、Anthropic Claude、DeepSeek 等
-- 🛡️ **安全机制**: 危险操作需用户确认
-- 💬 **交互模式**: 类似 Claude Code 的对话式编程体验
+-  **文件操作**: 读写文件、编辑文件、创建目录
+-  **代码搜索**: 支持 glob 通配符和正则表达式搜索
+-  **命令执行**: 在终端执行 shell 命令
+-  **图像读取**: 读取和分析图像（PNG/JPEG/GIF/WebP）- **v1.1.0 新功能**
+-  **多 API 支持**: OpenAI、Anthropic Claude、DeepSeek 等
+-  **安全机制**: 危险操作需用户确认
+-  **交互模式**: 类似 Claude Code 的对话式编程体验
 
-## 📦 安装
+##  安装
 
 ```bash
 npm install -g api-code-cli
 ```
 
-## 🚀 快速开始
+##  更新
+```bash
+apicode update
+```
+
+
+##  快速开始
 
 ### 1. 配置 API
 
@@ -67,7 +73,7 @@ AI › ⚙ read_image {"path":"design.png"}
     这个设计图展示了一个现代化的 Web 应用界面...
 ```
 
-## 🖼️ 图像功能详解
+##  图像功能详解
 
 ### 支持的格式
 - PNG (.png)
@@ -94,7 +100,7 @@ You › 这个 UI 设计图 design.png 有什么可以改进的地方？
 You › 读取 chart.png 并总结图表中的数据趋势
 ```
 
-## 🛠️ 可用工具
+##  可用工具
 
 | 工具 | 描述 | 危险操作 |
 |------|------|----------|
@@ -125,7 +131,7 @@ apicode serve
 /quit    # 退出（同 /exit）
 ```
 
-## ⚙️ 配置
+##  配置
 
 配置文件存储在 `~/.apicode/config.json`
 
@@ -150,7 +156,7 @@ apicode serve
 }
 ```
 
-## 🔒 安全特性
+##  安全特性
 
 危险操作会提示确认：
 
@@ -164,15 +170,15 @@ apicode serve
 执行吗？(y=同意 / n=拒绝 / a=本次全部同意): 
 ```
 
-## 🤝 贡献
+##  贡献
 
 欢迎提交 Issue 和 Pull Request！
 
-## 📄 许可证
+##  许可证
 
 MIT License - 详见 [LICENSE](LICENSE)
 
-## 🔗 相关链接
+##  相关链接
 
 - [GitHub 仓库](https://github.com/Elc-2077/apicode)
 - [问题反馈](https://github.com/Elc-2077/apicode/issues)
