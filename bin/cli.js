@@ -178,7 +178,7 @@ async function startREPL() {
   let isProcessing = false;
   let abortController = null; // 用于中断请求
 
-  term.on('key', async (name, matches, data) => {
+  const keyHandler = async (name, matches, data) => {
     if (isProcessing && name === 'ESCAPE') {
       // ESC 键中断当前请求
       if (abortController) {
@@ -232,7 +232,7 @@ async function startREPL() {
 
       // 检查是否是命令
       if (userMessage.startsWith('/')) {
-        await handleFixedCommand(userMessage, engine, ui, config);
+        await handleFixedCommand(userMessage, engine, ui, config, keyHandler);
         ui.drawInputLine();
         return;
       }
@@ -306,7 +306,8 @@ async function startREPL() {
       inputBuffer += String.fromCharCode(data.codepoint);
       ui.updateInput(inputBuffer);
     }
-  });
+  };
+  term.on('key', keyHandler);
 }
 
 /**
@@ -801,9 +802,67 @@ async function selectModel(apiConfig) {
 }
 
 /**
+ * 交互式选择模型：↑↓ 移动，回车确认，1-9 直接选，ESC 取消。
+ * 运行菜单期间临时摘掉 REPL 的按键监听，避免与菜单抢按键，结束后再装回去。
+ */
+async function pickModelInteractive(config, engine, ui, keyHandler) {
+  ui.showInfo('正在获取可用模型...');
+  const probe = await fetchSiteModels(config.baseUrl, config.apiKey);
+  const models = probe.models || [];
+  if (models.length === 0) {
+    ui.showError('无法获取模型列表: ' + (probe.error || '未知'));
+    ui.showInfo('当前模型: ' + config.model + '（可用 /model <名称> 手动切换）');
+    return;
+  }
+  lastModelList = models;
+
+  const curIndex = Math.max(0, models.indexOf(config.model));
+  const items = models.map((m, i) => `${i + 1}. ${m}` + (m === config.model ? '  (当前)' : ''));
+
+  // 提示行
+  term.eraseLine();
+  term.column(1);
+  console.log(chalk.cyan('选择模型') + chalk.gray('（↑↓ 移动，回车确认，1-9 直接选，ESC 取消）'));
+
+  // 暂停 REPL 按键监听，交给菜单，结束后恢复
+  if (keyHandler) term.removeListener('key', keyHandler);
+  let selected = null;
+  try {
+    const res = await term.singleColumnMenu(items, {
+      selectedIndex: curIndex,
+      cancelable: true,
+      exitOnUnexpectedKey: true,
+      leftPadding: '  ',
+      selectedLeftPadding: '▶ '
+    }).promise;
+
+    if (res && !res.canceled && res.unexpectedKey === undefined) {
+      selected = res.selectedIndex;
+    } else if (res && /^[0-9]$/.test(res.unexpectedKey || '')) {
+      const n = Number(res.unexpectedKey);
+      if (n >= 1 && n <= models.length) selected = n - 1;
+    }
+  } finally {
+    term.grabInput({ mouse: false });
+    if (keyHandler) term.on('key', keyHandler);
+  }
+
+  if (selected === null || selected === undefined) {
+    ui.showInfo('已取消，仍使用: ' + config.model);
+    return;
+  }
+
+  const target = models[selected];
+  engine.switchModel(target);
+  config.model = target;
+  ui.config.model = target;
+  ui.showInfo('已切换到模型: ' + target);
+}
+
+/**
  * 处理命令（固定输入框模式）
  */
-async function handleFixedCommand(command, engine, ui, config) {
+async function handleFixedCommand(command, engine, ui, config, keyHandler) {
   const parts = command.split(' ');
   const cmd = parts[0].toLowerCase();
 
@@ -825,20 +884,8 @@ async function handleFixedCommand(command, engine, ui, config) {
     case '/model': {
       const arg = parts[1];
       if (!arg) {
-        // 不带参数：拉取当前站点可用模型，列出供选择
-        ui.showInfo('正在获取可用模型...');
-        const probe = await fetchSiteModels(config.baseUrl, config.apiKey);
-        if (!probe.models || probe.models.length === 0) {
-          ui.showError('无法获取模型列表: ' + (probe.error || '未知'));
-          ui.showInfo('当前模型: ' + config.model + '（可用 /model <名称> 手动切换）');
-          break;
-        }
-        lastModelList = probe.models;
-        ui.print(chalk.cyan(`\n可用模型（共 ${probe.models.length} 个，输入 /model <编号> 或 /model <名称> 切换）:`));
-        probe.models.forEach((m, i) => {
-          const mark = m === config.model ? chalk.green('  ← 当前') : '';
-          ui.print('  ' + chalk.yellow(String(i + 1).padStart(2)) + '. ' + m + mark);
-        });
+        // 不带参数：弹出交互式菜单，↑↓ 选择、回车确认、1-9 直接选、ESC 取消
+        await pickModelInteractive(config, engine, ui, keyHandler);
       } else {
         // 带参数：支持按编号（引用上一次列表）或直接按名称切换
         let target = arg;
