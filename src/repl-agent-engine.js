@@ -38,6 +38,7 @@ class REPLAgentEngine {
       // 调用 agent 的工具循环
       const result = await this.agent.run(userMessage, {
         onText: hooks.onText,
+        onReasoning: hooks.onReasoning,
         onToolStart: hooks.onToolStart,
         onToolResult: hooks.onToolResult,
         confirm: hooks.confirm,

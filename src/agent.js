@@ -128,6 +128,7 @@ class Agent {
 
       // 处理流式响应
       let textContent = '';
+      let reasoningContent = '';   // 推理模型的思考内容（不作为最终答案，仅展示/兜底）
       let toolCalls = [];
       let currentToolCall = null;
       let usageData = null;
@@ -145,6 +146,14 @@ class Agent {
           if (delta?.content) {
             textContent += delta.content;
             if (hooks.onText) hooks.onText(delta.content);
+          }
+
+          // 推理内容：DeepSeek-R1 用 reasoning_content，部分网关（如 OpenRouter）用 reasoning。
+          // 单独收集并通过 onReasoning 展示，避免被当成「空响应」而提前结束回合。
+          const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning;
+          if (reasoningDelta) {
+            reasoningContent += reasoningDelta;
+            if (hooks.onReasoning) hooks.onReasoning(reasoningDelta);
           }
 
           // 工具调用
@@ -184,10 +193,15 @@ class Agent {
         this.usage.totalTokens += usageData.total_tokens || 0;
       }
 
+      // 兜底：推理模型（DeepSeek-R1/o1 等）可能这一步只产出思考内容 reasoning_content，
+      // 而正文 content 为空（常见于正文被 max_tokens 截断）。既没有工具调用时，就把思考内容
+      // 当作回答返回，避免「假空」提前结束回合，也避免写入 content/tool_calls 皆空的助手消息。
+      const finalText = textContent || (toolCalls.length === 0 ? reasoningContent : '');
+
       // 构建消息对象
       const msg = {
         role: 'assistant',
-        content: textContent || null
+        content: finalText || null
       };
 
       if (toolCalls.length > 0) {
@@ -207,7 +221,7 @@ class Agent {
 
       // 如果没有工具调用，返回结果
       if (toolCalls.length === 0) {
-        return { content: textContent || '（模型本轮未返回任何内容，可能是空响应或被中断，已跳过写入历史）', usage: this.usage };
+        return { content: finalText || '（模型本轮未返回任何内容，可能是空响应或被中断，已跳过写入历史）', usage: this.usage };
       }
 
       // 执行工具，缓存图像数据

@@ -248,6 +248,10 @@ async function startREPL() {
             // 流式输出文本，不换行
             process.stdout.write(chalk.cyan(text));
           },
+          onReasoning: (text) => {
+            // 推理模型的思考内容，用灰色显示以区分正式回答
+            process.stdout.write(chalk.gray(text));
+          },
           onToolStart: ({ name, args }) => {
             ui.print(chalk.yellow(`\n🔧 调用工具: ${chalk.bold(name)}`));
           },
