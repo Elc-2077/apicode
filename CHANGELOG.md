@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.7] - 2026-08-28
+
+### Changed
+- 🔀 **`/model` 切换模型时保留当前对话上下文**: 此前切换模型会新建 Agent 导致对话历史清空，现在会把历史迁移到新模型，切换后可继续当前上下文和项目。OpenAI 类模型会保留新模型的 system 提示再接上旧对话，Anthropic 直接沿用。
+
 ## [1.1.6] - 2026-08-28
 
 ### Added
