@@ -60,6 +60,29 @@ class Agent {
     return { rootDir: this.rootDir, confirm: hooks.confirm };
   }
 
+  // 移除 content 和 tool_calls 都为空的助手消息；这类消息会让接口报
+  // 400 Invalid assistant message: content or tool_calls must be set。
+  // 同时连带丢弃紧跟其后、因此失去对应 tool_call 的 tool 结果消息。
+  // 用于自动修复之前已被污染、持续 400 的会话。
+  _sanitizeOpenAIMessages() {
+    const cleaned = [];
+    for (let i = 0; i < this.messages.length; i++) {
+      const m = this.messages[i];
+      if (m && m.role === 'assistant') {
+        const hasText = (typeof m.content === 'string' && m.content.trim() !== '')
+          || (Array.isArray(m.content) && m.content.length > 0);
+        const hasCalls = Array.isArray(m.tool_calls) && m.tool_calls.length > 0;
+        if (!hasText && !hasCalls) {
+          // 跳过这条空助手消息，并丢弃紧随其后、已无对应 tool_call 的 tool 消息
+          while (i + 1 < this.messages.length && this.messages[i + 1] && this.messages[i + 1].role === 'tool') i++;
+          continue;
+        }
+      }
+      cleaned.push(m);
+    }
+    this.messages = cleaned;
+  }
+
   /**
    * 跑一轮用户输入直到给出最终回答。
    * hooks: { onText(text), onToolStart({name,args}), onToolResult({name,result}), confirm({name,args,preview}), signal(AbortSignal) }
@@ -74,6 +97,10 @@ class Agent {
     const tools = toOpenAITools();
 
     for (let step = 0; step < this.maxSteps; step++) {
+      // 发送前清洗历史，剔除可能残留的空助手消息（及其失去归属的 tool 消息），
+      // 避免历史一旦被污染就每轮 400。
+      this._sanitizeOpenAIMessages();
+
       const requestOptions = {
         model: this.model,
         messages: this.messages,
@@ -169,12 +196,18 @@ class Agent {
         msg.content = null;
       }
 
-      // 把助手这一步加入历史
-      this.messages.push(msg);
+      // 只有当助手消息真正有内容或工具调用时才写入历史。
+      // 否则会往历史塞一条 content 和 tool_calls 都为空的助手消息，
+      // 下一轮就会被接口拒绝：400 content or tool_calls must be set。
+      const hasText = typeof msg.content === 'string' && msg.content.trim() !== '';
+      const hasCalls = Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0;
+      if (hasText || hasCalls) {
+        this.messages.push(msg);
+      }
 
       // 如果没有工具调用，返回结果
       if (toolCalls.length === 0) {
-        return { content: textContent || '', usage: this.usage };
+        return { content: textContent || '（模型本轮未返回任何内容，可能是空响应或被中断，已跳过写入历史）', usage: this.usage };
       }
 
       // 执行工具，缓存图像数据
@@ -273,7 +306,10 @@ class Agent {
         if (block.type === 'text') textOut += block.text;
         else if (block.type === 'tool_use') toolUses.push(block);
       }
-      this.messages.push({ role: 'assistant', content: resp.content });
+      // 只有当返回了内容块时才写入历史，避免空 content 数组污染历史导致后续 400
+      if (Array.isArray(resp.content) && resp.content.length > 0) {
+        this.messages.push({ role: 'assistant', content: resp.content });
+      }
       if (textOut && hooks.onText) hooks.onText(textOut);
 
       if (toolUses.length === 0 || resp.stop_reason !== 'tool_use') {
