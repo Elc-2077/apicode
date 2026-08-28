@@ -23,6 +23,9 @@ const os = require('os');
 // 解析命令行参数
 const args = process.argv.slice(2);
 
+// 缓存上一次 /model 拉取到的模型列表，供按编号切换
+let lastModelList = [];
+
 // 如果是 update 命令，执行自动更新
 if (args[0] === 'update') {
   const { execSync } = require('child_process');
@@ -819,16 +822,36 @@ async function handleFixedCommand(command, engine, ui, config) {
       ui.showInfo('会话已清空');
       break;
 
-    case '/model':
-      if (parts[1]) {
-        engine.switchModel(parts[1]);
-        config.model = parts[1];
-        ui.config.model = parts[1];
-        ui.showInfo('已切换到模型: ' + parts[1]);
+    case '/model': {
+      const arg = parts[1];
+      if (!arg) {
+        // 不带参数：拉取当前站点可用模型，列出供选择
+        ui.showInfo('正在获取可用模型...');
+        const probe = await fetchSiteModels(config.baseUrl, config.apiKey);
+        if (!probe.models || probe.models.length === 0) {
+          ui.showError('无法获取模型列表: ' + (probe.error || '未知'));
+          ui.showInfo('当前模型: ' + config.model + '（可用 /model <名称> 手动切换）');
+          break;
+        }
+        lastModelList = probe.models;
+        ui.print(chalk.cyan(`\n可用模型（共 ${probe.models.length} 个，输入 /model <编号> 或 /model <名称> 切换）:`));
+        probe.models.forEach((m, i) => {
+          const mark = m === config.model ? chalk.green('  ← 当前') : '';
+          ui.print('  ' + chalk.yellow(String(i + 1).padStart(2)) + '. ' + m + mark);
+        });
       } else {
-        ui.showInfo('当前模型: ' + config.model);
+        // 带参数：支持按编号（引用上一次列表）或直接按名称切换
+        let target = arg;
+        if (/^\d+$/.test(arg) && lastModelList[Number(arg) - 1]) {
+          target = lastModelList[Number(arg) - 1];
+        }
+        engine.switchModel(target);
+        config.model = target;
+        ui.config.model = target;
+        ui.showInfo('已切换到模型: ' + target);
       }
       break;
+    }
 
     case '/exit':
     case '/quit':
