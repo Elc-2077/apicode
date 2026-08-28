@@ -106,7 +106,7 @@ class Agent {
         messages: this.messages,
         tools,
         tool_choice: 'auto',
-        max_tokens: 4096,
+        max_tokens: 10000,
         stream: true,
         stream_options: { include_usage: true }
       };
@@ -132,6 +132,7 @@ class Agent {
       let toolCalls = [];
       let currentToolCall = null;
       let usageData = null;
+      let finishReason = null;     // 结束原因：length 表示被 max_tokens 截断
 
       try {
         for await (const chunk of stream) {
@@ -174,6 +175,11 @@ class Agent {
             }
           }
 
+          // 结束原因（最后一个 chunk 带上）
+          if (chunk.choices?.[0]?.finish_reason) {
+            finishReason = chunk.choices[0].finish_reason;
+          }
+
           // usage 信息
           if (chunk.usage) {
             usageData = chunk.usage;
@@ -191,6 +197,11 @@ class Agent {
         this.usage.inputTokens += usageData.prompt_tokens || 0;
         this.usage.outputTokens += usageData.completion_tokens || 0;
         this.usage.totalTokens += usageData.total_tokens || 0;
+      }
+
+      // 被 max_tokens 截断时提示用户，避免「看起来突然停了/内容不完整」却不知原因
+      if (finishReason === 'length' && hooks.onNotice) {
+        hooks.onNotice('\n⚠️ 输出被 max_tokens 截断（finish_reason=length），本轮内容可能不完整。可调高 max_tokens，或直接说「继续」。');
       }
 
       // 兜底：推理模型（DeepSeek-R1/o1 等）可能这一步只产出思考内容 reasoning_content，
@@ -287,7 +298,7 @@ class Agent {
     for (let step = 0; step < this.maxSteps; step++) {
       const requestOptions = {
         model: this.model,
-        max_tokens: 4096,
+        max_tokens: 10000,
         system: this.systemPrompt,
         tools,
         messages: this.messages
@@ -325,6 +336,21 @@ class Agent {
         this.messages.push({ role: 'assistant', content: resp.content });
       }
       if (textOut && hooks.onText) hooks.onText(textOut);
+
+      // 安全策略拒绝（Fable 5 / Opus 5 等：HTTP 200 但 stop_reason=refusal），
+      // 明确告知用户原因，而不是安静地空结束
+      if (resp.stop_reason === 'refusal') {
+        const detail = resp.stop_details?.explanation
+          || (resp.stop_details?.category ? `类别：${resp.stop_details.category}` : '');
+        const suffix = detail ? `：${detail}` : '';
+        if (hooks.onNotice) hooks.onNotice(`\n⛔ 模型拒绝了本次请求（stop_reason=refusal）${suffix}`);
+        return { content: textOut || `（请求被安全策略拒绝${suffix}）`, usage: this.usage };
+      }
+
+      // 被 max_tokens 截断时提示
+      if (resp.stop_reason === 'max_tokens' && hooks.onNotice) {
+        hooks.onNotice('\n⚠️ 输出被 max_tokens 截断（stop_reason=max_tokens），本轮内容可能不完整。可调高 max_tokens，或直接说「继续」。');
+      }
 
       if (toolUses.length === 0 || resp.stop_reason !== 'tool_use') {
         return { content: textOut, usage: this.usage };

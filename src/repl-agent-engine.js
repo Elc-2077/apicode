@@ -39,6 +39,7 @@ class REPLAgentEngine {
       const result = await this.agent.run(userMessage, {
         onText: hooks.onText,
         onReasoning: hooks.onReasoning,
+        onNotice: hooks.onNotice,
         onToolStart: hooks.onToolStart,
         onToolResult: hooks.onToolResult,
         confirm: hooks.confirm,
