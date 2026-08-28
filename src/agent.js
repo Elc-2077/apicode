@@ -106,7 +106,7 @@ class Agent {
         messages: this.messages,
         tools,
         tool_choice: 'auto',
-        max_tokens: 10000,
+        max_tokens: 32000,
         stream: true,
         stream_options: { include_usage: true }
       };
@@ -199,9 +199,9 @@ class Agent {
         this.usage.totalTokens += usageData.total_tokens || 0;
       }
 
-      // 被 max_tokens 截断时提示用户，避免「看起来突然停了/内容不完整」却不知原因
+      // 被 max_tokens 截断时提示用户：历史已保留，直接输入「继续」即可接着往下做
       if (finishReason === 'length' && hooks.onNotice) {
-        hooks.onNotice('\n⚠️ 输出被 max_tokens 截断（finish_reason=length），本轮内容可能不完整。可调高 max_tokens，或直接说「继续」。');
+        hooks.onNotice('\n⚠️ 输出被 max_tokens 截断（finish_reason=length），本轮内容可能不完整。直接输入「继续」即可接着输出，或调高 max_tokens。');
       }
 
       // 兜底：推理模型（DeepSeek-R1/o1 等）可能这一步只产出思考内容 reasoning_content，
@@ -298,7 +298,7 @@ class Agent {
     for (let step = 0; step < this.maxSteps; step++) {
       const requestOptions = {
         model: this.model,
-        max_tokens: 10000,
+        max_tokens: 32000,
         system: this.systemPrompt,
         tools,
         messages: this.messages
@@ -347,9 +347,9 @@ class Agent {
         return { content: textOut || `（请求被安全策略拒绝${suffix}）`, usage: this.usage };
       }
 
-      // 被 max_tokens 截断时提示
+      // 被 max_tokens 截断时提示：历史已保留，直接输入「继续」即可接着往下做
       if (resp.stop_reason === 'max_tokens' && hooks.onNotice) {
-        hooks.onNotice('\n⚠️ 输出被 max_tokens 截断（stop_reason=max_tokens），本轮内容可能不完整。可调高 max_tokens，或直接说「继续」。');
+        hooks.onNotice('\n⚠️ 输出被 max_tokens 截断（stop_reason=max_tokens），本轮内容可能不完整。直接输入「继续」即可接着输出，或调高 max_tokens。');
       }
 
       if (toolUses.length === 0 || resp.stop_reason !== 'tool_use') {
