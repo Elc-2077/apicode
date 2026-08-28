@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-08-28
+
+### Changed
+- ⬆️ **`max_tokens` 4096 → 10000**（OpenAI 与 Anthropic 两条分支）: 原值对 2026 年这批推理/思考模型偏低，思考容易吃满预算导致正文被截断为空。
+
+### Added
+- ✨ **截断 / 拒绝状态提示（新增 `onNotice` 回调，黄色显示）**: 之前被截断或被安全策略拒绝时会「安静地空结束」，用户无从判断原因。现已明确提示：
+  - OpenAI 分支：捕获 `finish_reason`，为 `length`（被 `max_tokens` 截断）时提示本轮可能不完整、可调高 `max_tokens` 或说「继续」。
+  - Anthropic 分支：`stop_reason === 'max_tokens'` 同样提示截断；`stop_reason === 'refusal'`（Fable 5 / Opus 5 等安全拒绝，HTTP 200）时读取 `stop_details` 说明并明确告知，而非空结束。
+  - 贯穿 `agent.js` → `repl-agent-engine.js` → `bin/cli.js`。
+
 ## [1.1.9] - 2026-08-28
 
 ### Fixed
