@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.6] - 2026-08-28
+
+### Added
+- ✨ **`/model` 交互式菜单切换模型**: 直接输入 `/model`（不带参数）会拉取当前站点的可用模型列表并弹出交互式菜单——`↑↓` 移动、回车确认、按 `1-9` 直接选、`ESC` 取消，默认高亮当前模型。运行菜单期间临时摘掉 REPL 按键监听避免抢键，结束后恢复。仍支持 `/model <编号>` / `/model <名称>` 直接切换。
+
+## [1.1.5] - 2026-08-28
+
+### Added
+- ✨ **`/model` 支持列出并切换模型**: 直接输入 `/model`（不带参数）会拉取当前站点的可用模型列表并编号显示，标出当前模型；再用 `/model <编号>` 或 `/model <名称>` 即可切换。此前 `/model` 只能显示当前模型。
+
+### Fixed
+- 🐛 **修复固定界面模式下命令崩溃**: 输入 `/help`、`/model` 等命令后程序抛出 `TypeError: ui.drawInputBox is not a function` 并退出。原因是 `handleFixedCommand` 调用了不存在的 `ui.drawInputBox()`，现更正为 `ui.drawInputLine()`。
+
 ## [1.1.3] - 2026-08-27
 
 ### Changed
