@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 2026-08-28
+
+### Fixed
+- 🐛 **修复对话中途自动结束、结算 token 后续每轮 400 的问题**: 当模型某一步返回空响应（无文字、无工具调用，常见于只发 `reasoning_content` 的推理模型或被中断/空响应）时，旧逻辑会把一条 `content` 与 `tool_calls` 都为空的助手消息写入历史。这条脏消息导致：① agentic 循环误判任务完成而提前 `return`，对话在输出/调用工具中途自动结束并结算 token；② 下一轮把它发回接口，报 `400 Invalid assistant message: content or tool_calls must be set`，同一会话此后每次请求都失败。
+  - 空助手消息不再写入历史（OpenAI 与 Anthropic 两条分支都已加守护）。
+  - 每次请求前清洗历史，剔除残留的空助手消息及其失去归属的 `tool` 消息，可自动修复此前已被污染、持续 400 的会话。
+
 ## [1.1.7] - 2026-08-28
 
 ### Changed
