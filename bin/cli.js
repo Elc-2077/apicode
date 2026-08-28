@@ -842,7 +842,7 @@ async function handleFixedCommand(command, engine, ui, config) {
       ui.showError('未知命令: ' + cmd);
   }
 
-  ui.drawInputBox();
+  ui.drawInputLine();
 }
 
 /**
