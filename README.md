@@ -1,6 +1,6 @@
 # api-code-cli
 
-**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、**读取图像**。
+**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、读取图像。现已更新到v1.2.1
 
 [![npm version](https://img.shields.io/npm/v/api-code-cli.svg)](https://www.npmjs.com/package/api-code-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -199,6 +199,12 @@ MIT License - 详见 [LICENSE](LICENSE)
 - 命令执行功能
 - 多 API 支持
 
+### v1.2.1
+- max_tokens 提到 32000，给推理/思考模型更充足输出空间
+- 不做模型自动续写：会话历史跨轮保留且不再被污染，任一轮被截断/提前结束后，用户直接输入「继续」即可接着做。
+- 截断提示语改为引导「继续」
+
 ---
+
 
 Made with ❤️ by [Elc-2077](https://github.com/Elc-2077)
