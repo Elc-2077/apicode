@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.9] - 2026-08-28
+
+### Fixed
+- 🐛 **修复推理模型（DeepSeek-R1 / o1 等）对话/调用工具中途「假空」提前结束**: 这类模型在流式里通过 `reasoning_content`（部分网关用 `reasoning`）输出思考内容，而旧代码只累加 `delta.content`，于是把「只有思考、正文为空」的这一步误判为空响应，提前结束回合并结算 token。现已单独捕获推理增量：
+  - 新增 `onReasoning` 回调，思考内容以灰色实时展示，与青色正式回答区分（贯穿 `agent.js` → `repl-agent-engine.js` → `bin/cli.js`）。
+  - 当某步只产出思考内容、正文为空且无工具调用时，用思考内容兜底作为回答返回，不再「假空」结束，也不写入空助手消息。
+
 ## [1.1.8] - 2026-08-28
 
 ### Fixed
