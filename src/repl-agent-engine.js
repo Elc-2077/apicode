@@ -186,6 +186,8 @@ class REPLAgentEngine {
    * 切换模型
    */
   switchModel(newModel) {
+    // 切换前留存当前对话历史，切换后继续同一上下文（不清空）
+    const prevMessages = this.agent ? this.agent.messages : null;
     this.config.model = newModel;
     this.agent = new Agent({
       baseUrl: this.config.baseUrl,
@@ -194,6 +196,15 @@ class REPLAgentEngine {
       type: this.config.type,
       rootDir: process.cwd()
     });
+    // 恢复上下文：Anthropic 直接沿用；OpenAI 保留新模型的 system 提示再接上旧对话
+    if (prevMessages && prevMessages.length) {
+      if (this.agent.type === 'anthropic') {
+        this.agent.messages = prevMessages;
+      } else {
+        const history = prevMessages.filter(m => m.role !== 'system');
+        this.agent.messages = [this.agent.messages[0], ...history];
+      }
+    }
   }
 }
 
