@@ -13,3 +13,7 @@ records.json
 *.db
 *.db-journal
 .api-usage-tracker/
+
+# AI 代理工具的本地会话产物（含机器路径等隐私，绝不能进仓库）
+.mimosa/
+.zcode/

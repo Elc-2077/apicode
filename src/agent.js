@@ -7,15 +7,19 @@
 const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const { TOOL_SCHEMAS, executeTool } = require('./agent-tools');
+const { buildSkillIndex } = require('./skills');
+const { buildStylePrompt, DEFAULT_STYLE } = require('./styles');
 
-function buildSystemPrompt(modelName) {
-  return `你是一个专业的编码助手，当前使用的模型是 ${modelName}。你可以读写文件、搜索代码、执行终端命令来完成用户的编程任务。
+// 拼接顺序固定：base → 技能索引 → 风格段落（风格放最后，近因效应最强，且默认风格为空串）
+function buildSystemPrompt(modelName, skills, styleId) {
+  const base = `你是一个专业的编码助手，当前使用的模型是 ${modelName}。你可以读写文件、搜索代码、执行终端命令来完成用户的编程任务。
 准则：
 - 动手前先用 read_file / list_dir / glob / grep 了解现状，不要凭空猜测文件内容。
 - 修改已有文件优先用 edit_file（精确替换）；新建文件用 write_file。
 - 每一步只做必要的操作，危险操作会由用户确认，被拒绝时换方案或询问。
 - 完成后用简洁中文说明你做了什么。
 - 当用户询问你是什么模型时，直接回答：我是 ${modelName}。`;
+  return base + buildSkillIndex(skills) + buildStylePrompt(styleId);
 }
 
 function normalizeBaseUrl(baseUrl, type) {
@@ -41,9 +45,11 @@ class Agent {
     this.model = config.model;
     this.rootDir = config.rootDir || process.cwd();
     this.maxSteps = config.maxSteps || 25;
+    this.skills = Array.isArray(config.skills) ? config.skills : [];
+    this.styleId = config.style || DEFAULT_STYLE;
 
-    // 动态生成系统提示（包含模型名）
-    this.systemPrompt = buildSystemPrompt(this.model);
+    // 动态生成系统提示（模型名 + 本机技能索引 + 表达风格）
+    this.systemPrompt = buildSystemPrompt(this.model, this.skills, this.styleId);
 
     if (this.type === 'anthropic') {
       this.client = new Anthropic({ apiKey: config.apiKey, baseURL: normalizeBaseUrl(config.baseUrl, 'anthropic') });
@@ -57,7 +63,8 @@ class Agent {
   }
 
   _ctx(hooks) {
-    return { rootDir: this.rootDir, confirm: hooks.confirm };
+    // skills 传给工具层，load_skill 据此按名查表
+    return { rootDir: this.rootDir, confirm: hooks.confirm, skills: this.skills };
   }
 
   // 移除 content 和 tool_calls 都为空的助手消息；这类消息会让接口报
@@ -393,6 +400,30 @@ class Agent {
 
   clear() {
     this.messages = this.type === 'anthropic' ? [] : [{ role: 'system', content: this.systemPrompt }];
+  }
+
+  /**
+   * 重建 system prompt 并同步到已固化的历史消息：
+   * - Anthropic：system 每次请求现取（见 _runAnthropic），改完即生效。
+   * - OpenAI：system 固化在 messages[0]，这里同步改写（后续 clear() 也会用新 prompt 重播）。
+   */
+  _syncSystemPrompt() {
+    this.systemPrompt = buildSystemPrompt(this.model, this.skills, this.styleId);
+    if (this.type !== 'anthropic' && this.messages.length > 0 && this.messages[0].role === 'system') {
+      this.messages[0].content = this.systemPrompt;
+    }
+  }
+
+  /** 会话中热更新技能表 */
+  setSkills(skills) {
+    this.skills = Array.isArray(skills) ? skills : [];
+    this._syncSystemPrompt();
+  }
+
+  /** 会话中热更新表达风格（只影响提示词末尾的风格段落） */
+  setStyle(id) {
+    this.styleId = id || DEFAULT_STYLE;
+    this._syncSystemPrompt();
   }
 }
 

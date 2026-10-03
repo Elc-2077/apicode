@@ -9,12 +9,15 @@ const termkit = require('terminal-kit');
 const term = termkit.terminal;
 const chalk = require('chalk');
 const axios = require('axios');
-const { listApis, addApi, removeApi } = require('../src/config');
+const { listApis, addApi, removeApi, loadConfig, saveConfig } = require('../src/config');
 const { testConnection, queryApi, listSiteModels, fetchSiteModels } = require('../src/api');
 const { API_PRESETS } = require('../src/presets');
 const { getStats } = require('../src/tracker');
 const REPLAgentEngine = require('../src/repl-agent-engine');
 const REPLFixedUI = require('../src/repl-fixed-ui');
+const { discoverSkills, findSkill } = require('../src/skills');
+const skillPanel = require('../src/skill-panel');
+const { listStyles, isValidStyle, styleTag, DEFAULT_STYLE } = require('../src/styles');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
@@ -128,8 +131,16 @@ async function startREPL() {
     systemPrompt: 'You are a helpful AI assistant with file system and command execution capabilities.'
   };
 
+  // 扫描本机技能目录（同步，必须在建 Agent 之前：system prompt 要带上技能索引）
+  config.skills = discoverSkills({ rootDir: process.cwd() });
+
+  // 读回上次选择的表达风格（必须在建 Agent 之前：风格段落要进首条 system prompt）
+  const savedStyle = String((loadConfig() || {}).style || '').toLowerCase();
+  config.style = isValidStyle(savedStyle) ? savedStyle : DEFAULT_STYLE;
+
   const engine = new REPLAgentEngine(config);
   const ui = new REPLFixedUI(config);
+  ui.setUiStyle(config.style);
 
   // 初始化界面
   ui.init();
@@ -138,6 +149,14 @@ async function startREPL() {
   ui.sessionStats = engine.getSessionStats();
   ui.printStats();
   ui.drawInputLine();
+
+  // 技能加载提示（此时 UI 已就绪、无按键竞态）
+  if (config.skills.length > 0) {
+    ui.showInfo(`本机发现 ${config.skills.length} 个技能：输入 / 搜索（打字过滤、↑↓ 选择、PgUp/PgDn 翻页、回车加载进上下文）`);
+  }
+  if (config.style !== DEFAULT_STYLE) {
+    ui.showInfo(`当前风格：${styleTag(config.style)}（只改表达方式，代码能力与危险操作确认不变；/style code 切回）`);
+  }
 
   // 确认函数（危险操作逐条询问）
   const confirmState = { allowAll: false };
@@ -178,6 +197,224 @@ async function startREPL() {
   let isProcessing = false;
   let abortController = null; // 用于中断请求
 
+  // —— `/` 前缀实时候选面板 ——
+  // 画在输入行下方、不永久占行：每行以 '\n' 下移造行，画完用相对 up(n) 回到输入行；
+  // 全程只用列/相对移动，绝不查游标位置（terminal-kit 的 getCursorLocation 在 Windows 上不可靠）。
+  const SLASH_COMMANDS = [
+    { cmd: '/help', desc: '显示帮助' },
+    { cmd: '/clear', desc: '清空会话' },
+    { cmd: '/model', desc: '查看/切换模型' },
+    { cmd: '/style', desc: '切换 Agent 风格' },
+    { cmd: '/skills', desc: '技能状态与搜索' },
+    { cmd: '/exit', desc: '退出' },
+    { cmd: '/quit', desc: '退出（同 /exit）' }
+  ];
+  // items = 完整匹配列表；sel = 绝对选中下标；win = 可见窗口起始下标（几百个技能也能翻到底）
+  // mode: 'slash' = 输入 / 时的实时搜索；'pick' = 命令回车后的二级选择面板（/style），
+  //       两种模式共用同一套行渲染与 up(n) 记账，只是条目来源和 Enter 的落点不同
+  const panel = { items: [], sel: -1, win: 0, rows: 0, dismissed: false, total: 0, query: '', mode: 'slash', hint: '' };
+
+  // 整串已经是一个可直接执行的命令形态 → 不弹面板，把 Enter 留给命令逻辑
+  function isCommandForm(buf) {
+    const low = (buf || '').toLowerCase().trim();
+    return SLASH_COMMANDS.some(c => c.cmd === low) || low === '/skills all';
+  }
+
+  // 可见正文行数（不含提示行），随视口高度变化
+  function panelBodyRows() {
+    return Math.max(1, skillPanel.panelRowBudget(term.height) - 1);
+  }
+
+  // 条目挑选与行渲染都在 src/skill-panel.js（纯函数，可按列宽单测「每行只占一行」）
+  function buildPanelItems(query) {
+    const r = skillPanel.buildItems({
+      skills: config.skills,
+      commands: SLASH_COMMANDS,
+      query
+    });
+    panel.total = r.total;
+    return r.items;
+  }
+
+  function panelLines(items) {
+    return skillPanel.buildLines({
+      items,
+      selected: panel.sel,
+      winStart: panel.win,
+      rows: panelBodyRows(),
+      query: panel.query,
+      total: panel.total,
+      cols: skillPanel.panelCols(term.width),
+      hint: panel.hint || undefined,
+      pendingNames: engine.getPendingSkills().map(s => s.name),
+      loadedNames: engine.getLoadedSkills()
+    });
+  }
+
+  // 移动选中项并保证它在可见窗口内（窗口随之滚动 = 翻页）
+  function moveSel(delta) {
+    const n = panel.items.length;
+    if (n === 0) return;
+    const rows = panelBodyRows();
+    panel.sel = Math.max(0, Math.min(n - 1, panel.sel + delta));
+    if (panel.sel < panel.win) panel.win = panel.sel;
+    else if (panel.sel >= panel.win + rows) panel.win = panel.sel - rows + 1;
+    renderPanel();
+  }
+
+  function jumpSel(to) {
+    const n = panel.items.length;
+    if (n === 0) return;
+    panel.sel = Math.max(0, Math.min(n - 1, to));
+    const rows = panelBodyRows();
+    if (panel.sel < panel.win) panel.win = panel.sel;
+    else if (panel.sel >= panel.win + rows) panel.win = Math.max(0, panel.sel - rows + 1);
+    renderPanel();
+  }
+
+  function renderPanel() {
+    if (!process.stdout.isTTY) { panel.rows = 0; return; }
+    try {
+      // 游标此刻在输入行：清掉本行与其下方的一切（下方只可能是旧面板）
+      term.column(1);
+      term.eraseLine();
+      if (panel.rows > 0) term.eraseDisplayBelow();
+      ui.drawInputLine();
+
+      const lines = panel.items.length ? panelLines(panel.items) : [];
+      if (lines.length === 0) { panel.rows = 0; return; }
+
+      // 记账必须等于真实下移的行数：只要有一行仍可能触边换行，up(n) 就会少回一行、
+      // 输入行逐次往下漂并留下残渣 —— 这种情况宁可整块不画（fail-closed），也不能画歪。
+      if (!skillPanel.fitsOneRowEach(lines, term.width)) {
+        panel.items = [];
+        panel.rows = 0;
+        panel.mode = 'slash';
+        panel.hint = '';
+        return;
+      }
+
+      lines.forEach(l => {
+        term('\n');          // 下移造行（贴近屏底时终端自然滚动，相对记账同样成立）
+        term.column(1);
+        term(l);
+        term.styleReset();   // 必须在换行前复位，否则屏底新造的行会继承背景色
+      });
+      panel.rows = lines.length;
+      term.up(lines.length); // 回到输入行（up 只接正数步长）
+      term.column(1);
+    } catch (e) {
+      panel.items = [];
+      panel.rows = 0;
+      panel.mode = 'slash';
+      panel.hint = '';
+    }
+  }
+
+  function hidePanel() {
+    panel.mode = 'slash';
+    panel.hint = '';
+    if (panel.items.length === 0 && panel.rows === 0) return;
+    panel.items = [];
+    panel.sel = -1;
+    panel.win = 0;
+    renderPanel();
+  }
+
+  // —— 二级选择面板：命令回车后接着用 ↑↓ 挑一项，再回车确认（/style）——
+  function buildChoiceItems(list, currentId) {
+    return list.map(s => ({
+      type: 'choice',
+      id: s.id,
+      label: (s.tag ? s.tag + ' ' : '') + s.name + (s.id === currentId ? '（当前）' : ''),
+      desc: s.summary
+    }));
+  }
+
+  /** 打开选择面板；返回 false = 没得选（列表空、或非 TTY 画不出来），调用侧退回静态文案 */
+  function beginPick(items, hint) {
+    hidePanel();               // 先复位模式与旧行，再立新的条目
+    if (!process.stdout.isTTY || items.length === 0) return false;
+    panel.mode = 'pick';
+    panel.items = items;
+    panel.query = '';
+    panel.total = items.length;
+    panel.sel = 0;
+    panel.win = 0;
+    panel.hint = hint;
+    renderPanel();
+    return panel.items.length > 0;   // 画不出来会被 fail-closed 清空，这里据实回报
+  }
+
+  function beginStylePick() {
+    const cur = engine.getStyle();
+    return beginPick(
+      buildChoiceItems(listStyles(), cur),
+      `↑↓ 选择 · Enter 或数字确认 · Esc 取消 · 当前：${styleTag(cur)}`
+    );
+  }
+
+  function refreshPanel() {
+    if (!process.stdout.isTTY) return;
+
+    if (!inputBuffer.startsWith('/')) {
+      panel.dismissed = false;
+      hidePanel();
+      return;
+    }
+    if (panel.dismissed || isCommandForm(inputBuffer)) {
+      hidePanel();
+      return;
+    }
+
+    const query = inputBuffer.slice(1).trim();
+    panel.mode = 'slash';      // 这是 `/` 搜索路径：模式与条目来源必须一致，别留旧的 pick
+    panel.hint = '';
+    panel.query = query;
+    panel.items = buildPanelItems(query);
+    panel.sel = panel.items.length > 0 ? 0 : -1;
+    panel.win = 0;   // 查询词变了，窗口回到顶部
+    renderPanel();
+  }
+
+  function reportSkillQueue(r) {
+    if (r.ok) {
+      ui.print(chalk.green(`  ✓ 已选入技能 ${r.name}（${r.chars} 字符）—— 下一条消息发出时会自动带上它的 SKILL.md 指令`));
+    } else if (r.reason === 'pending') {
+      ui.print(chalk.yellow(`  ℹ️ ${r.name} 已经在待发送队列里了`));
+    } else if (r.reason === 'already') {
+      ui.print(chalk.gray(`  ℹ️ ${r.name} 的指令已进入上下文，无需重复加载（/clear 可清掉）`));
+    } else if (r.reason === 'read-fail') {
+      ui.showError(`读取 ${r.name} 的 SKILL.md 失败: ${r.error}`);
+    } else {
+      ui.showError('未能识别该技能');
+    }
+  }
+
+  function acceptPanelItem(item) {
+    hidePanel(); // 先擦面板，后面 ui.print 才能正常占行
+    if (!item) return;
+
+    if (item.type === 'choice') {
+      // 补一行等价命令，让 scrollback 里看得出这次选择等于敲了什么
+      ui.print(chalk.gray('  → /style ' + item.id));
+      applyStyleChoice(item.id, engine, ui, config);
+      return;
+    }
+
+    if (item.type === 'cmd') {
+      inputBuffer = item.cmd;
+      ui.inputBuffer = item.cmd;
+      ui.drawInputLine(); // 填好命令，再按一次 Enter 执行
+      return;
+    }
+
+    const r = engine.queueSkill(item.skill);
+    inputBuffer = '';
+    ui.inputBuffer = '';
+    reportSkillQueue(r);
+  }
+
   const keyHandler = async (name, matches, data) => {
     if (isProcessing && name === 'ESCAPE') {
       // ESC 键中断当前请求
@@ -208,11 +445,37 @@ async function startREPL() {
       process.exit(0);
     }
 
+    // —— 候选面板按键：↑↓ 移动、PgUp/PgDn 翻页、Home/End 首尾、Tab/Enter 接受、Esc 收起 ——
+    if (panel.items.length > 0) {
+      if (name === 'UP') { moveSel(-1); return; }
+      if (name === 'DOWN') { moveSel(1); return; }
+      if (name === 'PAGE_UP') { moveSel(-panelBodyRows()); return; }
+      if (name === 'PAGE_DOWN') { moveSel(panelBodyRows()); return; }
+      if (name === 'HOME') { jumpSel(0); return; }
+      if (name === 'END') { jumpSel(panel.items.length - 1); return; }
+      if (name === 'TAB' || name === 'SHIFT_TAB') {
+        acceptPanelItem(panel.items[Math.max(0, panel.sel)]);
+        return;
+      }
+      if (name === 'ESCAPE') {
+        const wasPick = panel.mode === 'pick';   // hidePanel 会把模式复位，先留个凭证
+        panel.dismissed = true;
+        hidePanel();
+        if (wasPick) ui.showInfo(`已取消，仍使用 ${styleTag(engine.getStyle())}`);
+        return;
+      }
+      if (name === 'ENTER' && !isCommandForm(inputBuffer)) {
+        acceptPanelItem(panel.items[Math.max(0, panel.sel)]);
+        return;
+      }
+    }
+
     // 退格键
     if (name === 'BACKSPACE') {
       if (inputBuffer.length > 0) {
         inputBuffer = inputBuffer.slice(0, -1);
         ui.updateInput(inputBuffer);
+        refreshPanel();
       }
       return;
     }
@@ -224,6 +487,8 @@ async function startREPL() {
       const userMessage = inputBuffer.trim();
       inputBuffer = '';
       ui.inputBuffer = ''; // 同步清空 UI 的 inputBuffer
+      panel.dismissed = false;
+      hidePanel();         // 擦掉可能残留的面板行，避免变成脏行
 
       // 清除当前输入行并打印用户消息
       term.eraseLine();
@@ -232,7 +497,7 @@ async function startREPL() {
 
       // 检查是否是命令
       if (userMessage.startsWith('/')) {
-        await handleFixedCommand(userMessage, engine, ui, config, keyHandler);
+        await handleFixedCommand(userMessage, engine, ui, config, keyHandler, { report: reportSkillQueue, pickStyle: beginStylePick });
         ui.drawInputLine();
         return;
       }
@@ -260,6 +525,12 @@ async function startREPL() {
             ui.print(chalk.yellow(`\n🔧 调用工具: ${chalk.bold(name)}`));
           },
           onToolResult: ({ name, result }) => {
+            // 技能正文很长且已喂给模型，终端只报一行，避免刷屏；错误文本走通用显示
+            if (name === 'load_skill' && result.startsWith('【技能')) {
+              ui.print(chalk.gray(`  ↳ 已加载技能指令（${result.length} 字符，正文已喂给模型）`));
+              return;
+            }
+
             // 对于图片读取，只显示简短确认信息
             if (name === 'read_image') {
               try {
@@ -311,11 +582,24 @@ async function startREPL() {
 
     // 普通字符输入
     if (data.isCharacter && !data.isControl) {
-      inputBuffer += String.fromCharCode(data.codepoint);
+      const ch = String.fromCharCode(data.codepoint);
+      if (panel.mode === 'pick') {
+        // 二级面板：数字直接选中对应项；其他字符先收起面板，再按普通输入处理
+        if (/^[1-9]$/.test(ch)) {
+          const it = panel.items[Number(ch) - 1];
+          if (it) { acceptPanelItem(it); return; }
+        }
+        hidePanel();
+      }
+      inputBuffer += ch;
       ui.updateInput(inputBuffer);
+      refreshPanel();
     }
   };
   term.on('key', keyHandler);
+
+  // 视口尺寸变化会打乱面板的行数记账，直接收起最稳
+  term.on('resize', () => { hidePanel(); });
 }
 
 /**
@@ -868,9 +1152,37 @@ async function pickModelInteractive(config, engine, ui, keyHandler) {
 }
 
 /**
- * 处理命令（固定输入框模式）
+ * 应用风格：改 Agent（重建 system prompt）、改 UI 前缀、写回 config.json。
+ * 保存失败只降级提示，本次会话仍然生效；不抛错打断对话。
+ * @returns {boolean} 是否切成功
  */
-async function handleFixedCommand(command, engine, ui, config, keyHandler) {
+function applyStyleChoice(id, engine, ui, config) {
+  const want = String(id || '').trim().toLowerCase();
+  if (!isValidStyle(want)) {
+    ui.showError(`未知风格「${want}」。可选：${listStyles().map(s => s.id).join(' / ')}`);
+    return false;
+  }
+
+  engine.setStyle(want);   // 重建 system prompt（OpenAI 分支同步改写 messages[0]）
+  ui.setUiStyle(want);     // UI 提示前缀 + 统计栏标签
+  config.style = want;
+
+  try {
+    const cfg = loadConfig() || {};
+    saveConfig({ ...cfg, style: want });
+  } catch (e) {
+    ui.showError(`风格已在本次会话生效，但保存偏好失败：${e.message}`);
+  }
+  ui.showInfo(`已切换到 ${styleTag(want)}（代码能力与危险操作确认保持不变；/style 可再选，/style code 切回默认）`);
+  return true;
+}
+
+/**
+ * 处理命令（固定输入框模式）
+ * @param {{report:(r:any)=>void, pickStyle?:()=>boolean}} skillUi 由 startREPL 注入：
+ *   report = 技能选入结果的文案，pickStyle = 打开 /style 的二级选择面板（返回 false 表示画不出来）
+ */
+async function handleFixedCommand(command, engine, ui, config, keyHandler, skillUi = { report: () => {} }) {
   const parts = command.split(' ');
   const cmd = parts[0].toLowerCase();
 
@@ -880,7 +1192,12 @@ async function handleFixedCommand(command, engine, ui, config, keyHandler) {
       ui.print(chalk.gray('  /help   - 显示帮助'));
       ui.print(chalk.gray('  /clear  - 清空会话'));
       ui.print(chalk.gray('  /model  - 查看/切换模型'));
+      ui.print(chalk.gray('  /style  - 切换表达风格（直接回车弹选择面板 ↑↓ 选；也可 /style neko、/style code）'));
+      ui.print(chalk.gray('  /skills - 技能状态（/skills <名称> 加载、/skills all 重扫列表）'));
       ui.print(chalk.gray('  /exit   - 退出'));
+      ui.print(chalk.gray('  /quit   - 退出（同 /exit）'));
+      ui.print(chalk.gray('  提示：输入 / 弹出技能搜索面板，可搜索全部 ' + engine.getSkills().length + ' 个技能'));
+      ui.print(chalk.gray('        打字即过滤 · ↑↓ 选择 · PgUp/PgDn 翻页 · Home/End 首尾 · 回车加载进上下文 · Esc 关闭'));
       break;
 
     case '/clear':
@@ -904,6 +1221,76 @@ async function handleFixedCommand(command, engine, ui, config, keyHandler) {
         config.model = target;
         ui.config.model = target;
         ui.showInfo('已切换到模型: ' + target);
+      }
+      break;
+    }
+
+    case '/style': {
+      // 风格 id 里不太可能有空格，但沿用 /skills 的收法保持一致
+      const arg = parts.slice(1).join(' ').trim().toLowerCase();
+
+      if (!arg) {
+        // 不带参数：打开二级选择面板 —— ↑↓ 选风格、回车（或数字）确认、Esc 取消。
+        // 面板画不出来（非 TTY、或窄到放不下两行）才退回静态列表。
+        if (typeof skillUi.pickStyle === 'function' && skillUi.pickStyle()) break;
+
+        const cur = engine.getStyle();
+        ui.print(chalk.cyan('\nAgent 风格（只改表达方式，不改代码能力与危险操作确认）:'));
+        listStyles().forEach(s => {
+          const mark = s.id === cur ? chalk.green('▶ ') : '  ';
+          ui.print(mark + chalk.white((s.tag ? s.tag + ' ' : '') + s.name) +
+            chalk.gray(' — ' + s.summary + '  （/style ' + s.id + '）'));
+        });
+        ui.showInfo('当前风格：' + styleTag(cur) + '；切换后会自动记住（写在 config.json 的 style 字段）');
+        break;
+      }
+
+      if (!isValidStyle(arg)) {
+        ui.showError(`未知风格「${arg}」。可选：${listStyles().map(s => s.id).join(' / ')}`);
+        break;
+      }
+
+      applyStyleChoice(arg, engine, ui, config);
+      break;
+    }
+
+    case '/skills': {
+      // 技能名可能含空格：命令后全部参数并回一个名字
+      const arg = parts.slice(1).join(' ').trim();
+      const total = engine.getSkills().length;
+
+      // /skills <名称>：不经面板，直接选入待发送队列
+      if (arg && arg.toLowerCase() !== 'all') {
+        const skill = findSkill(engine.getSkills(), arg);
+        if (!skill) {
+          ui.showError(`未找到技能「${arg}」（本机 ${total} 个；输入 / 可实时搜索）`);
+          break;
+        }
+        skillUi.report(engine.queueSkill(skill));
+        break;
+      }
+
+      const pending = engine.getPendingSkills();
+      const loaded = engine.getLoadedSkills();
+
+      ui.print(chalk.cyan('\n技能状态:'));
+      ui.print(chalk.gray(`  本机发现 ${total} 个 · 待随下一条消息发出：${pending.length ? pending.map(s => `${s.name}(${s.chars} 字符)`).join(', ') : '无'}`));
+      ui.print(chalk.gray(`  已进入上下文：${loaded.length ? loaded.join(', ') : '无'}（正文此后每轮都会重发，/clear 才移除）`));
+
+      if (arg && arg.toLowerCase() === 'all') {
+        // 重新扫盘（技能目录增删后不必重启），并热更新系统提示里的索引
+        engine.setSkills(discoverSkills({ rootDir: process.cwd() }));
+        const all = engine.getSkills();
+        const shown = all.slice(0, 40);
+        ui.print(chalk.gray(`  重新扫描后共 ${all.length} 个，前 ${shown.length} 个：`));
+        shown.forEach(s => {
+          const mark = pending.some(p => p.name === s.name) ? chalk.yellow(' ✓待发送')
+            : (loaded.includes(s.name) ? chalk.blue(' ●已在上下文') : '');
+          ui.print(chalk.gray('    ') + chalk.white(s.name) + mark);
+        });
+        if (all.length > shown.length) ui.print(chalk.gray('    …（输入 / 加关键字即可实时筛选全部）'));
+      } else {
+        ui.showInfo('输入 / 弹出技能搜索面板 → 继续打字缩小范围 → ↑↓ 选择 → 回车加载进上下文；/skills all 重扫并列前 40 个');
       }
       break;
     }
