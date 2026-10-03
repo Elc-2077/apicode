@@ -1,0 +1,55 @@
+{
+  "name": "api-code-cli",
+  "version": "1.2.1",
+  "description": "AI 编码助手 CLI - 支持读写文件、搜索代码、执行命令、读取图像，类似 Claude Code",
+  "main": "index.js",
+  "bin": {
+    "apicode": "bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js",
+    "serve": "node bin/proxy-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "coding",
+    "assistant",
+    "cli",
+    "openai",
+    "anthropic",
+    "claude",
+    "deepseek",
+    "gpt",
+    "code-editor",
+    "file-tools",
+    "terminal",
+    "automation"
+  ],
+  "author": "Elc-2077",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Elc-2077/apicode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Elc-2077/apicode/issues"
+  },
+  "homepage": "https://github.com/Elc-2077/apicode#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "axios": "^1.6.0",
+    "better-sqlite3": "^13.0.3",
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.3",
+    "commander": "^11.0.0",
+    "dayjs": "^1.11.9",
+    "http-proxy": "^1.18.1",
+    "inquirer": "^8.2.5",
+    "openai": "^7.4.0",
+    "sql.js": "^1.8.0",
+    "terminal-kit": "^3.0.1"
+  }
+}

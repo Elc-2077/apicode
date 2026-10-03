@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20261003T043609379Z-59344-2f638d0a1d0b",
+  "runId": "20261003T043609379Z-59344-2f638d0a1d0b",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "d48df26dd883de303d45df21fd347c9b2750ee32",
+  "diffHash": "4a67568f6e701269193e3b4ba8b20cf02b08050dbc45166fd847c1856fcb475b",
+  "rulesVersion": "unavailable",
+  "sessionHash": "46d5f4b36cd183a2674c367cb5389a751e73ed184f9c78e050ab0f1510dd44d7",
+  "reportRef": ".mimosa/reports/task-review-sess_73801256-a633-43aa-8400-3a253e3fd169-20261003T043609379Z-59344-2f638d0a1d0b.json",
+  "events": [
+    {
+      "eventId": "hook-5cd4c268557f6cf6d1fb6e6b14f2483b",
+      "findingId": "mimosa-c177b65a506957be3445a61c",
+      "type": "finding_blocked",
+      "at": "2026-10-03T04:22:25.440Z",
+      "identity": {
+        "projectRelativeFile": "src/skills.js",
+        "ruleId": "security",
+        "codeEvidenceHash": "e074ce19f8fe2abdf8e04ded9b219646a174eb9e4e7cff7f8a7249850dce349d",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 97,
+      "endLine": 97,
+      "reasonCode": "deny",
+      "reportedToAgent": true,
+      "evidence": {
+        "kind": "source",
+        "boundary": "candidate",
+        "producer": "deterministic",
+        "evidenceHash": "e074ce19f8fe2abdf8e04ded9b219646a174eb9e4e7cff7f8a7249850dce349d"
+      },
+      "sequence": 0
+    },
+    {
+      "eventId": "hook-21d9a8dfd5897220af9c4f118442c0eb",
+      "findingId": "mimosa-c177b65a506957be3445a61c",
+      "type": "static_fix_verified",
+      "at": "2026-10-03T04:23:24.869Z",
+      "identity": {
+        "projectRelativeFile": "src/skills.js",
+        "ruleId": "security",
+        "codeEvidenceHash": "e074ce19f8fe2abdf8e04ded9b219646a174eb9e4e7cff7f8a7249850dce349d",
+        "confidence": "stable"
+      },
+      "scope": "direct",
+      "line": 97,
+      "endLine": 97,
+      "reasonCode": "static_rescan_passed",
+      "reportedToAgent": false,
+      "evidence": {
+        "kind": "static_scan",
+        "boundary": "observed",
+        "producer": "deterministic",
+        "evidenceHash": "e074ce19f8fe2abdf8e04ded9b219646a174eb9e4e7cff7f8a7249850dce349d"
+      },
+      "sequence": 1
+    }
+  ],
+  "observedFindingIds": [
+    "mimosa-e89b50167b35d56a57f95eb6"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "src/skills.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/agent.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/agent-tools.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/repl-agent-engine.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "bin/cli.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-10-03T04:36:09.721Z"
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20261003T051756606Z-34340-e583a2df5a5e",
+  "runId": "20261003T051756606Z-34340-e583a2df5a5e",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "d48df26dd883de303d45df21fd347c9b2750ee32",
+  "diffHash": "5e4d841bfcb418adae58fa94433b45b44afaa9b5f2d740160d5465ab184bc3b2",
+  "rulesVersion": "unavailable",
+  "sessionHash": "46d5f4b36cd183a2674c367cb5389a751e73ed184f9c78e050ab0f1510dd44d7",
+  "reportRef": ".mimosa/reports/task-review-sess_73801256-a633-43aa-8400-3a253e3fd169-20261003T051756606Z-34340-e583a2df5a5e.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [
+    {
+      "file": "src/skills.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/repl-agent-engine.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "bin/cli.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-10-03T05:17:57.048Z"
+}

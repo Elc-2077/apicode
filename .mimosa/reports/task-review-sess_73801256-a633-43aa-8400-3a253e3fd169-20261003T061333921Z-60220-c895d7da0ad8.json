@@ -1,0 +1,287 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20261003T061333921Z-60220-c895d7da0ad8",
+  "run_status": "completed",
+  "errors": [],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "complete",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": true,
+      "captured_files": 40,
+      "candidate_limit": 5000,
+      "truncated": false,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 7
+    },
+    "change_tracking": {
+      "touched_observed": 7,
+      "touched_retained": 7,
+      "truncated": false,
+      "bash_mutation": false,
+      "bash_discovered": 0,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 7,
+      "selected_files": 7,
+      "limit": 20,
+      "truncated": false
+    },
+    "scanning": {
+      "required_files": 6,
+      "scanned_files": 6,
+      "skipped_files": 0,
+      "failed_files": 0,
+      "project_checks_required": 1,
+      "project_checks_completed": 1
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {},
+    "reasons": [],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-10-03T06:13:33.921Z",
+  "session_id": "sess_73801256-a633-43aa-8400-3a253e3fd169",
+  "target": ".",
+  "revision": "d48df26dd883de303d45df21fd347c9b2750ee32",
+  "rules_version": "unavailable",
+  "diff_hash": "aa3f7c2a6ff52f18a7999e63ff47fc4cee755081c784befa9d7ad78f8063c98d",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 7,
+    "changed_files": [
+      {
+        "file": "C:/Users/aoye/AppData/Local/Temp/apicode-style-ui-test.js",
+        "ranges": [
+          {
+            "start": 1,
+            "end": 50
+          }
+        ],
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "after_hash": "06d0b965318dae7ff20f31263ef55b34076827aba5bfb607859f1f547086b394"
+      },
+      {
+        "file": "AGENTS.md",
+        "ranges": [
+          {
+            "start": 8,
+            "end": 8
+          },
+          {
+            "start": 29,
+            "end": 29
+          },
+          {
+            "start": 50,
+            "end": 50
+          }
+        ],
+        "before_hash": "c44235aeea71b4ac3b08d0b8e1263e56d1e923f9111814a286e792e143cd6196",
+        "after_hash": "f66f5b15175b92541c1ffe3510b5ce5828a78c0a0ba9a53184f97d0aa2b61900"
+      },
+      {
+        "file": "bin/cli.js",
+        "ranges": [
+          {
+            "start": 12,
+            "end": 12
+          },
+          {
+            "start": 20,
+            "end": 20
+          },
+          {
+            "start": 137,
+            "end": 140
+          },
+          {
+            "start": 143,
+            "end": 143
+          },
+          {
+            "start": 157,
+            "end": 159
+          },
+          {
+            "start": 207,
+            "end": 207
+          },
+          {
+            "start": 1106,
+            "end": 1106
+          },
+          {
+            "start": 1139,
+            "end": 1172
+          }
+        ],
+        "before_hash": "cc09eef076d320682ade48c587c647f1a0318541c0c2d56ded947cb496a15cc7",
+        "after_hash": "3964032d03220e99f6975912cd8d950618016b93e500d7690ed6cc58ecccfca6"
+      },
+      {
+        "file": "src/agent.js",
+        "ranges": [
+          {
+            "start": 11,
+            "end": 11
+          },
+          {
+            "start": 13,
+            "end": 14
+          },
+          {
+            "start": 22,
+            "end": 22
+          },
+          {
+            "start": 49,
+            "end": 49
+          },
+          {
+            "start": 51,
+            "end": 52
+          },
+          {
+            "start": 406,
+            "end": 406
+          },
+          {
+            "start": 410,
+            "end": 411
+          },
+          {
+            "start": 416,
+            "end": 427
+          }
+        ],
+        "before_hash": "db64af3c6ba3a93670242e8ceab579429dce48264a9e31794ee8055e8f6fee18",
+        "after_hash": "4140d4cd6be89f0441cb8ec1f39425d87cf301302f48433fdb591483488590f8"
+      },
+      {
+        "file": "src/repl-agent-engine.js",
+        "ranges": [
+          {
+            "start": 20,
+            "end": 21
+          },
+          {
+            "start": 256,
+            "end": 257
+          },
+          {
+            "start": 281,
+            "end": 294
+          }
+        ],
+        "before_hash": "3cbe40decc667ab7a3b9374035f2e47ded1a15d15f3fdef773d42e7bf28d5fc7",
+        "after_hash": "e97853b421516af71127c4adabaeb3c34f9de95f3b8898d8917fb4de0c7f0df7"
+      },
+      {
+        "file": "src/repl-fixed-ui.js",
+        "ranges": [
+          {
+            "start": 9,
+            "end": 9
+          },
+          {
+            "start": 14,
+            "end": 16
+          },
+          {
+            "start": 56,
+            "end": 64
+          },
+          {
+            "start": 77,
+            "end": 78
+          },
+          {
+            "start": 83,
+            "end": 83
+          },
+          {
+            "start": 145,
+            "end": 145
+          },
+          {
+            "start": 148,
+            "end": 148
+          }
+        ],
+        "before_hash": "7fbb556de0114638690710dc9d8548f3395194369f25d8b8e2296303f6d80ec8",
+        "after_hash": "2a6b594689c4e277d4a33409a7d1e6ceb0240415a76052ef4363863abb87aa07"
+      },
+      {
+        "file": "src/styles.js",
+        "ranges": [
+          {
+            "start": 1,
+            "end": 99
+          }
+        ],
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "after_hash": "eaa3f9518a58064b59eff6e3ab56d0026d6ac77c2396f221641e962c95a6acc4"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-10-03T06:13:32.507Z",
+    "completed_at": "2026-10-03T06:13:33.921Z",
+    "duration_ms": 1414,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "complete",
+    "latencyMs": 1414,
+    "peakMemoryBytes": 157872128,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 6,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-sess_73801256-a633-43aa-8400-3a253e3fd169-20261003T061333921Z-60220-c895d7da0ad8.json",
+    "latest_report": ".mimosa/reports/task-review-sess_73801256-a633-43aa-8400-3a253e3fd169.json",
+    "history_summary": ".mimosa/history/run-20261003T061333921Z-60220-c895d7da0ad8.json"
+  }
+}

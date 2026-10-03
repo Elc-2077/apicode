@@ -1,0 +1,242 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20261003T051756606Z-34340-e583a2df5a5e",
+  "run_status": "completed",
+  "errors": [],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "complete",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": true,
+      "captured_files": 36,
+      "candidate_limit": 5000,
+      "truncated": false,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 4
+    },
+    "change_tracking": {
+      "touched_observed": 4,
+      "touched_retained": 4,
+      "truncated": false,
+      "bash_mutation": false,
+      "bash_discovered": 0,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 4,
+      "selected_files": 4,
+      "limit": 20,
+      "truncated": false
+    },
+    "scanning": {
+      "required_files": 3,
+      "scanned_files": 3,
+      "skipped_files": 0,
+      "failed_files": 0,
+      "project_checks_required": 1,
+      "project_checks_completed": 1
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {},
+    "reasons": [],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-10-03T05:17:56.606Z",
+  "session_id": "sess_73801256-a633-43aa-8400-3a253e3fd169",
+  "target": ".",
+  "revision": "d48df26dd883de303d45df21fd347c9b2750ee32",
+  "rules_version": "unavailable",
+  "diff_hash": "5e4d841bfcb418adae58fa94433b45b44afaa9b5f2d740160d5465ab184bc3b2",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 4,
+    "changed_files": [
+      {
+        "file": "AGENTS.md",
+        "ranges": [
+          {
+            "start": 28,
+            "end": 28
+          },
+          {
+            "start": 47,
+            "end": 48
+          }
+        ],
+        "before_hash": "a67dda69539f1f7d70c74ea7757effd20e0b8397187de030978167349f0ed2a7",
+        "after_hash": "5ad339cc8fd964356226c8c2768abc6f4c67fcf1ea674941b06c2ad50733bdf1"
+      },
+      {
+        "file": "bin/cli.js",
+        "ranges": [
+          {
+            "start": 18,
+            "end": 18
+          },
+          {
+            "start": 148,
+            "end": 148
+          },
+          {
+            "start": 190,
+            "end": 345
+          },
+          {
+            "start": 376,
+            "end": 402
+          },
+          {
+            "start": 408,
+            "end": 408
+          },
+          {
+            "start": 420,
+            "end": 421
+          },
+          {
+            "start": 430,
+            "end": 430
+          },
+          {
+            "start": 517,
+            "end": 517
+          },
+          {
+            "start": 521,
+            "end": 523
+          },
+          {
+            "start": 1077,
+            "end": 1077
+          },
+          {
+            "start": 1079,
+            "end": 1079
+          },
+          {
+            "start": 1089,
+            "end": 1089
+          },
+          {
+            "start": 1091,
+            "end": 1091
+          },
+          {
+            "start": 1122,
+            "end": 1122
+          },
+          {
+            "start": 1124,
+            "end": 1128
+          },
+          {
+            "start": 1131,
+            "end": 1131
+          },
+          {
+            "start": 1135,
+            "end": 1155
+          }
+        ],
+        "before_hash": "a236fbb74515cd41c4be1074843d5784d8ad094e594fb3c65ea8b8bd030c0c7f",
+        "after_hash": "bd0ad48684540b08ae15d0893f3aa8b8f2dd1c96989ba96087f8dbc3a67efb6b"
+      },
+      {
+        "file": "src/repl-agent-engine.js",
+        "ranges": [
+          {
+            "start": 8,
+            "end": 8
+          },
+          {
+            "start": 33,
+            "end": 82
+          },
+          {
+            "start": 90,
+            "end": 91
+          },
+          {
+            "start": 228,
+            "end": 230
+          }
+        ],
+        "before_hash": "38c72b9b07eee2f2575d8ebea21eeca7a22427c953e831d3fbb30116925cc7f5",
+        "after_hash": "3cbe40decc667ab7a3b9374035f2e47ded1a15d15f3fdef773d42e7bf28d5fc7"
+      },
+      {
+        "file": "src/skills.js",
+        "ranges": [
+          {
+            "start": 263,
+            "end": 294
+          },
+          {
+            "start": 326,
+            "end": 327
+          }
+        ],
+        "before_hash": "a66a9b5162034bf33141ad5287d4507edaea58406f98703ffa4b6622be0624b2",
+        "after_hash": "df36e4419785d60c7c6b4b2ed6529e1ad77da2a514c74ebad061296ceec40e48"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-10-03T05:17:55.086Z",
+    "completed_at": "2026-10-03T05:17:56.606Z",
+    "duration_ms": 1520,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "complete",
+    "latencyMs": 1520,
+    "peakMemoryBytes": 157720576,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 3,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-sess_73801256-a633-43aa-8400-3a253e3fd169-20261003T051756606Z-34340-e583a2df5a5e.json",
+    "latest_report": ".mimosa/reports/task-review-sess_73801256-a633-43aa-8400-3a253e3fd169.json",
+    "history_summary": ".mimosa/history/run-20261003T051756606Z-34340-e583a2df5a5e.json"
+  }
+}

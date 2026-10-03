@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-10-03T06:51:59.510Z",
+  "sessionId": "sess_73801256-a633-43aa-8400-3a253e3fd169",
+  "event": "PostToolUse",
+  "toolName": "Edit",
+  "file": "AGENTS.md",
+  "outcome": "clear",
+  "coverage": "complete",
+  "findingCount": 0,
+  "durationMs": 9,
+  "hostState": "hook_complete",
+  "reportHint": ".mimosa/reports/"
+}
