@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { findSkill, readSkillBody, isSkillRecordSafe, posixPath } = require('./skills');
 
 // —— 工具 schema（OpenAI function 格式；Anthropic 会在 agent 里转换）——
 const TOOL_SCHEMAS = [
@@ -117,6 +118,17 @@ const TOOL_SCHEMAS = [
         path: { type: 'string', description: '图像文件路径（相对或绝对）' }
       },
       required: ['path']
+    }
+  },
+  {
+    name: 'load_skill',
+    description: '按技能名读取本机技能（SKILL.md）的完整指令正文。当任务与系统提示「可用技能」列表中的某一项匹配时，先调用本工具获取全文，再严格按其指导执行；技能自带脚本经 run_shell 在技能目录内运行。',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '技能名（列表中的 name，大小写不敏感）' }
+      },
+      required: ['name']
     }
   }
 ];
@@ -315,6 +327,22 @@ async function executeTool(name, args, ctx = {}) {
           },
           path: p
         });
+      }
+      case 'load_skill': {
+        const skill = findSkill(ctx.skills, args.name);
+        // 复核记录边界：只允许读「技能根 / <技能目录> / SKILL.md」，
+        // 越界或伪造的记录一律按「未找到」回报，不去碰文件系统
+        if (!skill || !isSkillRecordSafe(skill)) {
+          const total = (ctx.skills || []).length;
+          return total === 0
+            ? `当前没有发现任何本机技能，无法加载「${args.name}」。`
+            : `未找到技能「${args.name}」（本机共 ${total} 个）。请核对系统提示「可用技能」列表里的名字，或让用户输入 /skills 查看。`;
+        }
+        const { body, description } = readSkillBody(skill);
+        const head = `【技能 ${skill.name}｜目录 ${posixPath(skill.dir)}】` +
+          (description ? `\n简介: ${description}` : '') +
+          `\n（该目录内的脚本/资源：用 run_shell 并把 cwd 设为上述目录执行，或按相对路径 read_file 读取）\n\n`;
+        return truncate(head + body);
       }
       default:
         return `未知工具: ${name}`;

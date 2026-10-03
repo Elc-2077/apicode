@@ -6,10 +6,14 @@ const termkit = require('terminal-kit');
 const term = termkit.terminal;
 const chalk = require('chalk');
 const { getStats } = require('./tracker');
+const { styleTag, uiPrefixFor, DEFAULT_STYLE } = require('./styles');
 
 class REPLFixedUI {
   constructor(config) {
     this.config = config;
+    // 表达风格：uiPrefix 只加在信息类提示上；报错与危险确认保持原样
+    this.styleId = (config && config.style) || DEFAULT_STYLE;
+    this.uiPrefix = uiPrefixFor(this.styleId);
     this.sessionStats = {
       inputTokens: 0,
       outputTokens: 0,
@@ -50,6 +54,15 @@ class REPLFixedUI {
   }
 
   /**
+   * 切换 UI 侧的风格呈现（前缀 + 统计栏标签）；不影响报错与确认文案
+   */
+  setUiStyle(id) {
+    this.styleId = id || DEFAULT_STYLE;
+    this.config.style = this.styleId;
+    this.uiPrefix = uiPrefixFor(this.styleId);
+  }
+
+  /**
    * 打印统计栏
    */
   printStats() {
@@ -61,11 +74,13 @@ class REPLFixedUI {
     const sessionCost = s.cost.toFixed(4);
     const totalTokens = (t.totalInputTokens + t.totalOutputTokens).toLocaleString();
     const totalCost = t.totalCost.toFixed(4);
+    // 默认风格不加后缀，保持这一行与原来一致；非默认才追加，避免窄终端换行
+    const styleSuffix = this.styleId !== DEFAULT_STYLE ? `│ ${styleTag(this.styleId)} ` : '';
 
     console.log(chalk.gray('─'.repeat(60)));
     console.log(chalk.bgGray.black(
       ` 📊 会话: ${sessionTokens} tokens ($${sessionCost}) │ ` +
-      `总计: ${totalTokens} tokens ($${totalCost}) `
+      `总计: ${totalTokens} tokens ($${totalCost}) ` + styleSuffix
     ));
     console.log(chalk.gray('─'.repeat(60)));
   }
@@ -127,10 +142,10 @@ class REPLFixedUI {
   }
 
   /**
-   * 显示信息
+   * 显示信息（信息类提示，可带风格前缀）
    */
   showInfo(message) {
-    this.print(chalk.cyan.bold('ℹ️  ') + chalk.cyan(message));
+    this.print(chalk.cyan.bold(this.uiPrefix + 'ℹ️  ') + chalk.cyan(message));
   }
 
   /**

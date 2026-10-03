@@ -5,6 +5,7 @@
 
 const Agent = require('./agent');
 const { addRecord } = require('./tracker');
+const { readSkillBody, isSkillRecordSafe } = require('./skills');
 const chalk = require('chalk');
 
 class REPLAgentEngine {
@@ -15,7 +16,9 @@ class REPLAgentEngine {
       apiKey: config.apiKey,
       model: config.model,
       type: config.type,
-      rootDir: process.cwd() // 当前工作目录
+      rootDir: process.cwd(), // 当前工作目录
+      skills: Array.isArray(config.skills) ? config.skills : [], // 本机技能表（进 system prompt + 供 load_skill 查表）
+      style: config.style || 'code' // 表达风格（只追加提示词末尾的风格段落）
     });
 
     // 会话统计
@@ -28,6 +31,58 @@ class REPLAgentEngine {
       cost: 0,
       messageCount: 0
     };
+
+    // 技能队列：用户选中但尚未随消息发出的技能
+    this.pendingSkills = [];
+    // 已随消息进入对话历史的技能名（正文此后每轮都会重发，/clear 才移除）
+    this.loadedSkillNames = [];
+  }
+
+  /**
+   * 选入技能：读取 SKILL.md 正文放进待发送队列，等下一条用户消息一起发出。
+   * 先过 isSkillRecordSafe：记录必须确实是「技能根 / <技能目录> / SKILL.md」，
+   * 手搓或越界的记录直接拒掉，不去碰文件系统。
+   * @returns {{ok:boolean, name?:string, chars?:number, reason?:'no-skill'|'pending'|'already'|'read-fail', error?:string}}
+   */
+  queueSkill(skill) {
+    if (!skill || !skill.name || !isSkillRecordSafe(skill)) return { ok: false, reason: 'no-skill' };
+    const name = skill.name;
+    if (this.pendingSkills.some(s => s.name === name)) return { ok: false, reason: 'pending', name };
+    if (this.loadedSkillNames.includes(name)) return { ok: false, reason: 'already', name };
+
+    let r;
+    try {
+      r = readSkillBody(skill);
+    } catch (e) {
+      return { ok: false, reason: 'read-fail', name, error: e.message };
+    }
+    this.pendingSkills.push({ name, body: r.body, chars: r.body.length });
+    return { ok: true, name, chars: r.body.length };
+  }
+
+  getPendingSkills() {
+    return this.pendingSkills.map(s => ({ name: s.name, chars: s.chars }));
+  }
+
+  getLoadedSkills() {
+    return this.loadedSkillNames.slice();
+  }
+
+  /**
+   * 把待发送技能拼到用户消息最前面（一次性：发出后记入已加载）。
+   * 队列为空时原样返回，保证老行为零变化。
+   */
+  _composeMessage(userMessage) {
+    if (this.pendingSkills.length === 0) return userMessage;
+
+    const blocks = this.pendingSkills.map(s =>
+      `【已加载技能：${s.name}】以下是该技能 SKILL.md 的完整指令，请在本次任务中严格遵循：\n\n${s.body}`
+    );
+    const names = this.pendingSkills.map(s => s.name);
+    this.pendingSkills = [];
+    names.forEach(n => { if (!this.loadedSkillNames.includes(n)) this.loadedSkillNames.push(n); });
+
+    return blocks.join('\n\n') + '\n\n【用户消息】\n' + userMessage;
   }
 
   /**
@@ -35,8 +90,8 @@ class REPLAgentEngine {
    */
   async sendMessage(userMessage, hooks = {}) {
     try {
-      // 调用 agent 的工具循环
-      const result = await this.agent.run(userMessage, {
+      // 调用 agent 的工具循环（待发送的技能正文会拼在消息前面一起发出）
+      const result = await this.agent.run(this._composeMessage(userMessage), {
         onText: hooks.onText,
         onReasoning: hooks.onReasoning,
         onNotice: hooks.onNotice,
@@ -173,6 +228,9 @@ class REPLAgentEngine {
    */
   clearSession() {
     this.agent.clear();
+    // 新会话：技能队列与「已进上下文」记录一并作废（正文随历史一起清掉）
+    this.pendingSkills = [];
+    this.loadedSkillNames = [];
     this.sessionStats = {
       inputTokens: 0,
       outputTokens: 0,
@@ -196,7 +254,9 @@ class REPLAgentEngine {
       apiKey: this.config.apiKey,
       model: newModel,
       type: this.config.type,
-      rootDir: process.cwd()
+      rootDir: process.cwd(),
+      skills: Array.isArray(this.config.skills) ? this.config.skills : [],
+      style: this.config.style || 'code'
     });
     // 恢复上下文：Anthropic 直接沿用；OpenAI 保留新模型的 system 提示再接上旧对话
     if (prevMessages && prevMessages.length) {
@@ -207,6 +267,32 @@ class REPLAgentEngine {
         this.agent.messages = [this.agent.messages[0], ...history];
       }
     }
+  }
+
+  /**
+   * 会话中热更新技能表（/skills 重新扫描后调用），透传给 Agent 重建 system prompt。
+   */
+  setSkills(skills) {
+    this.config.skills = Array.isArray(skills) ? skills : [];
+    if (this.agent) this.agent.setSkills(this.config.skills);
+  }
+
+  getSkills() {
+    return Array.isArray(this.config.skills) ? this.config.skills : [];
+  }
+
+  /**
+   * 切换表达风格（/style）：透传给 Agent 重建 system prompt。
+   * 风格是全局偏好，不随 clearSession 清除。
+   */
+  setStyle(id) {
+    this.config.style = id || 'code';
+    if (this.agent) this.agent.setStyle(this.config.style);
+    return this.config.style;
+  }
+
+  getStyle() {
+    return this.config.style || 'code';
   }
 }
 
