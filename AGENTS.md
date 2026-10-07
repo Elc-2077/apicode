@@ -1,6 +1,6 @@
 # AGENTS.md
 
-api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API 用量追踪工具（apistat）」演进为「类 Claude Code 的 AI 编码助手 REPL」，同时保留用量统计与代理监控功能。npm 包名 `api-code-cli`，当前版本 1.2.1。
+api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API 用量追踪工具（apistat）」演进为「类 Claude Code 的 AI 编码助手 REPL」，同时保留用量统计与代理监控功能。npm 包名 `api-code-cli`，当前版本 1.2.4。
 
 ## 常用命令
 
@@ -29,6 +29,8 @@ api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API �
    - `styles.js` — Agent 表达风格注册表（`code` 默认、`neko` 猫娘）：每项只有 `blocks` 文案与 UI 前缀，`buildStylePrompt` 拼在 system prompt **最末尾**；默认风格返回空串以保证零差异
    - `term-width.js` / `skill-panel.js` — 面板的两块地基：前者按**终端显示列**量宽度（CJK 与「东亚模糊宽度」字符一律算 2 列，宁可估宽不可估窄），后者是候选面板的纯函数层（`buildItems` 挑条目、`buildLines` 出行文本、`fitsOneRowEach` 校验每行只占一行）。`bin/cli.js` 只管游标移动与按键分派。条目有三种 `type`：`cmd` / `skill` / `choice`（二级选择面板用，如 `/style`）；提示行固定为「第 N/M 项 · 窗口 a-b · …按键说明」，传 `hint` 只替换按键说明那一段，位置信息永远排在最前（窄终端截尾时先丢的是文案，不是位置）
    - `repl-fixed-ui.js` — 当前 REPL UI（固定输入行）；`repl-ui.js`、`repl-scroll-ui.js` 是旧 UI 变体；`repl-engine.js` 是无工具的旧对话引擎
+   - `boot-anim.js` — 启动开屏的 550W 风格自检动画（`bin/cli.js` 的 `startREPL` 开头调用 `bootScreen`）。纯观感层：不参与会话状态，任何异常静默降级，非 TTY / `--no-anim` / `APICODE_NO_ANIM=1` 自动跳过。三条硬约束 —— 只往前打印 + `\r` 原地重画（**绝不用 `term.up()`**，没有记账就不存在漂移）、动画期间只挂一次性 stdin 监听且返回前必须摘掉并归还 raw mode（否则后面的 `inputField` 收不到输入）、每个整行输出都过 `clipLine` 裁剪兜底。**它用自己的 `glyphWidth()` 而不是 `term-width.dispWidth`**：后者把 0x2500–0x27BF 的框线/方块一律算 2 列，对面板是安全的保守方向，但会让 53 列的 logo 被误判成 106 列而拒绝绘制、排版全面失真；`glyphWidth` 按真实渲染给装饰字形算 1 列、控制字符算 0 列（`charWidth` 会把 `\n` 算成 1 列，导致裁剪时吃掉换行、多行挤成一行）。改动画前先读该文件头注释。标题框内只有 `apicode` 一个字标（原先的 `5 5 0 W` / `行星发动机 · 控制终端` 已按要求换掉）。
+   - `ui-fx.js` — 跳转页面的**居中排版 + 载入动画**（纯观感层，业务逻辑一律不碰）。`padWidth/centerLines` 按**显示列**算偏移，`withLoader/transition` 是 `\r` 原地重画的转轮。与 `boot-anim` 共用 `glyphWidth` 与 `shouldAnimate`（关闭开关只有一个：非 TTY / `--no-anim` / `APICODE_NO_ANIM=1`）。**排除项按用户要求写死**：`pickPreset`（选择供应商）与对话界面本身不居中、不加动画，别顺手"统一"了。
 2. **用量追踪层**
    - `tracker.js` — JSON 记录存储（`~/.api-usage-tracker/records.json`），addRecord / getStats
    - `interceptor.js` — wrapOpenAI / wrapAnthropic / createTrackedFetch / setupAxiosInterceptor，供第三方以库的方式自动追踪（由根 `index.js` 导出）
@@ -54,6 +56,8 @@ api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API �
 - **max_tokens 为 32000，不做自动续写**（v1.2.1 行为）：截断时提示用户输入「继续」接续；会话历史跨轮保留。改动这块前先看 `repl-agent-engine.js` / `agent.js` 里的截断处理
 - **面板有两种模式（`panel.mode`）**：`'slash'` = 输入 `/` 的实时搜索；`'pick'` = 命令回车后的二级选择（目前只有 `/style` 无参数）。两种模式**共用**同一套 `renderPanel / moveSel / jumpSel` 与 `up(n)` 记账，所以打开二级面板只能经注入的 `skillUi.pickStyle()` → `beginPick(items, hint)`（它先 `hidePanel()` 复位、再立条目），**绝不能直接给 `panel.items` 赋值**。不变式：`hidePanel()` 把 mode 复位成 `'slash'` 并清 `hint`，`refreshPanel()`（搜索路径）也强制复位，`renderPanel()` 的两条 fail-closed/异常分支同样复位——所以 mode 与 items 永远不会互相打架。`beginPick` 在非 TTY、条目为空、或行宽放不下（被 fail-closed 清空）时返回 `false`，`handleFixedCommand` 的 `/style` 据此退回原来的静态列表文案。pick 模式按键：数字 `1-9` 直接选中该项，其余字符先收起面板再按普通输入走；`Enter`/`Tab` 走 `acceptPanelItem`（按 `item.type === 'choice'` 分派）；`Esc` 收起并回报「仍使用 X」（`wasPick` 要在 `hidePanel()` 之前取）。别把二级面板写成 `singleColumnMenu`：它自带阻塞、要临时摘掉 REPL 的 keyHandler，只有 `/model` 那种长静态列表值得（见下一条）。
 - **terminal-kit 按键监听**：弹出菜单时要临时 `term.removeListener('key', keyHandler)`，结束后 `term.grabInput({ mouse: false })` 再装回，否则菜单和 REPL 抢按键（参考 bin/cli.js 的 `pickModelInteractive`）
+- **`/exit` 是软返回，`/quit` 才是退进程**：`/exit` 只复位界面（清输入行、收候选面板），会话上下文、`pendingSkills`、待发送队列、token 统计一律不动，用户接着聊；`/quit` / `Ctrl+C` 才 `process.exit(0)`。`/exit` 的分支里**绝不能有 `process.exit`**。
+- **`handleFixedCommand` 够不到 REPL 的私有状态**：它是模块级函数，而 `inputBuffer` / `panel` / `hidePanel` 都定义在 `startREPL` 闭包内（`node --check` 只验语法，查不出这类越界引用）。要动这些状态必须像 `report` / `pickStyle` 那样经 `skillUi` 参数注入回调——`/exit` 用的是注入的 `softExit`，调用前先 `typeof … === 'function'` 兜底。
 - UI 文案、代码注释、系统提示词全部为中文；README 部分内容已过时（其自述「以文件里面的为准」），改动行为后应同步更新 README
 - 用户数据目录 `~/.api-usage-tracker/`（records.json / config.json / apistat.db）已在 .gitignore 排除，勿提交
 - read_image 返回 base64 图像内容，走 OpenAI / Anthropic 的视觉消息格式（见 agent.js 中的消息构造）

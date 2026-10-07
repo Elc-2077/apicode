@@ -1,6 +1,6 @@
 # api-code-cli
 
-**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、读取图像。现已更新到v1.2.1,代码内容以文件里面的为准，后面标识的和比较有些问题
+**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、读取图像。现已更新到v1.2.4,代码内容以文件里面的为准，后面标识的和比较有些问题
 
 [![npm version](https://img.shields.io/npm/v/api-code-cli.svg)](https://www.npmjs.com/package/api-code-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -129,14 +129,33 @@ apicode update
 apicode serve
 
 # 在对话模式中的命令
-/exit    # 退出
+/exit    # 返回对话界面（只收拾界面，会话不重置，可继续聊）
 /clear   # 清空对话上下文（也会清掉已加载的技能）
 /style   # 切换表达风格（回车后 ↑↓ 选择；也可 /style code、/style neko）
 /skills  # 技能状态（/skills <名称> 直接加载、/skills all 重扫并列前 40 个）
-/quit    # 退出（同 /exit）
+/quit    # 退出 apicode（同 Ctrl+C）
 
 # 输入 / 即可打开实时搜索面板（↑↓ 选择，PgUp/PgDn 翻页，回车加载）
 ```
+
+> `/exit` 与 `/quit` 的区别：`/exit` 是**软返回** —— 只把输入行和候选面板收拾干净，回到对话界面；会话上下文、已加载技能、待发送队列、token 统计全部原样保留，接着聊即可。真正结束进程用 `/quit` 或 `Ctrl+C`。
+
+## 开屏动画
+
+启动 `apicode` 时会播一段《流浪地球》550W 风格的冷青自检序列：标题框（框内是 `apicode` 字标）→ `APICODE` logo 逐行浮现 → 6 条自检项（量子运算核心、行星发动机链路……）进度条跑满后点亮 → 收在版本号上。整段属于观感层，播不播都不影响后续流程。
+
+- **跳过**：动画期间按任意键立即结束，`Ctrl+C` 直接退进程（不会因为动画让按键失灵）。
+- **关闭**：`apicode --no-anim`，或环境变量 `APICODE_NO_ANIM=1`。非 TTY（管道、CI、重定向到文件）自动降级为静态 logo + 一行版本号，不会往管道里灌色块。
+- **自适应**：≥52 列画外框 + 完整 logo；窄一些退到纯 ASCII 紧凑 logo；再窄就只留一行文字。所有输出按显示列宽裁剪兜底，永不折行。
+- 实现在 `src/boot-anim.js`；宽度测量用的是该文件自带的 `glyphWidth()`，**不用** `src/term-width.js` 的 `dispWidth`（后者对装饰字形取保守值，会把框线算成两倍宽，原因写在文件头注释里）。
+
+## 跳转页面：居中 + 载入动画
+
+除**选择供应商**（`pickPreset`，保持原样贴左）和**对话界面**本身以外，所有跳转页面（选择 API 配置 / 删除配置 / 选择模型 / 添加配置向导）都做了两件事，实现在 `src/ui-fx.js`：
+
+- **居中**：按**显示列**计算偏移，不用 `String.length` —— 中文与全角字符占 2 列，用字符数居中会整体偏右。列表按**最宽一行**整体平移（逐行各自居中会把编号打散成锯齿）；提示行 `请选择 (…)` 用同一个补白，光标才会落在列表左边界下方。
+- **载入动画**：会等待的步骤（拉 `GET /models`、验活、跳转本身）都套了一层原地重画的转轮 + 耗时，结束后把那一行擦干净再往下走，失败时也先擦干净才抛错。`apicode --no-anim` / `APICODE_NO_ANIM=1` / 非 TTY 一律不出动画。
+- **窄终端兜底**：终端比内容还窄时自动放弃居中、退回贴左排版，并把每行按显示列裁剪（越界即物理折行，会把整屏排版打乱）；绝不会因为「居中」而多折出一行。已在 20/24/30/38/40/44/48/52/56/64/80/100/120/200 列下验证零超宽行。
 
 ## Agent 风格（/style）
 
@@ -194,8 +213,10 @@ You: /style                          ← 输入 /style 回车，面板出现在�
 ▶ /help  显示帮助
   /clear  清空会话
   /model  查看/切换模型
+  /style  切换 Agent 风格
   /skills - 技能状态
-  /exit   退出
+  /exit   返回对话界面（会话保留）
+  /quit   退出 apicode（同 Ctrl+C）
   accessibility — 使用 WCAG 2.2 AA 级标准设计、实现和审计…
   agent-architecture-audit — 针对 Agent 和 LLM 应用的全栈诊断…
   agent-eval — 在自定义任务上对编码 Agent 进行对比评估…

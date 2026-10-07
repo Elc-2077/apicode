@@ -18,6 +18,9 @@ const REPLFixedUI = require('../src/repl-fixed-ui');
 const { discoverSkills, findSkill } = require('../src/skills');
 const skillPanel = require('../src/skill-panel');
 const { listStyles, isValidStyle, styleTag, DEFAULT_STYLE } = require('../src/styles');
+const { bootScreen } = require('../src/boot-anim');
+// 跳转页面的居中排版 + 载入动画（纯观感层，见 src/ui-fx.js 头注释）
+const uifx = require('../src/ui-fx');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
@@ -104,8 +107,8 @@ startREPL();
 async function startREPL() {
   term.clear();
 
-  // 显示欢迎信息
-  displayWelcome();
+  // 550W 风格开机动画（非 TTY 或 --no-anim 时自动降级为静态 logo，不阻塞启动）
+  await bootScreen({ version: require('../package.json').version });
 
   // 选择或添加 API 配置
   const apiConfig = await selectOrAddAPI();
@@ -206,8 +209,8 @@ async function startREPL() {
     { cmd: '/model', desc: '查看/切换模型' },
     { cmd: '/style', desc: '切换 Agent 风格' },
     { cmd: '/skills', desc: '技能状态与搜索' },
-    { cmd: '/exit', desc: '退出' },
-    { cmd: '/quit', desc: '退出（同 /exit）' }
+    { cmd: '/exit', desc: '返回对话界面（会话保留）' },
+    { cmd: '/quit', desc: '退出 apicode（同 Ctrl+C）' }
   ];
   // items = 完整匹配列表；sel = 绝对选中下标；win = 可见窗口起始下标（几百个技能也能翻到底）
   // mode: 'slash' = 输入 / 时的实时搜索；'pick' = 命令回车后的二级选择面板（/style），
@@ -354,6 +357,20 @@ async function startREPL() {
     );
   }
 
+  /**
+   * `/exit` 的软返回：只把界面收干净，回到输入行。
+   * 会话（messages、已加载技能、待发送队列、token 统计）一律不动 —— 这是与 /quit 的唯一区别。
+   * 必须在 startREPL 内部定义：inputBuffer / panel / hidePanel 都是这个闭包的私有状态，
+   * handleFixedCommand 是模块级函数，够不到它们，所以经 skillUi.softExit 注入。
+   */
+  function softExit() {
+    inputBuffer = '';
+    ui.inputBuffer = '';
+    panel.dismissed = false;
+    hidePanel();
+    ui.showInfo('已返回对话界面（会话保留，可继续聊；退出请输入 /quit 或按 Ctrl+C）');
+  }
+
   function refreshPanel() {
     if (!process.stdout.isTTY) return;
 
@@ -497,7 +514,7 @@ async function startREPL() {
 
       // 检查是否是命令
       if (userMessage.startsWith('/')) {
-        await handleFixedCommand(userMessage, engine, ui, config, keyHandler, { report: reportSkillQueue, pickStyle: beginStylePick });
+        await handleFixedCommand(userMessage, engine, ui, config, keyHandler, { report: reportSkillQueue, pickStyle: beginStylePick, softExit: softExit });
         ui.drawInputLine();
         return;
       }
@@ -603,35 +620,72 @@ async function startREPL() {
 }
 
 /**
+ * 居中打印一组列表行，并返回这一块的左侧补白（供随后的提示行对齐）。
+ * 用 uifx.padWidth 按**最宽一行**算偏移：逐行各自居中会把编号打散成锯齿。
+ * 提示行的 `请选择 (…)` 用同一个 pad，光标才会落在列表左边界下方。
+ * 每行都按剩余列宽裁剪 —— 窄终端下越界会物理折行，把整屏排版打乱。
+ */
+function printCentered(lines) {
+  const cols = term.width || 80;
+  const pad = uifx.padWidth(lines, cols);
+  const room = Math.max(8, cols - pad.length);
+  lines.forEach((l) => console.log(pad + uifx.clipFor(l, room)));
+  return pad;
+}
+
+/**
+ * 居中打印一行提示（`请选择 (…)` 之类），与列表左边界对齐并裁到剩余列宽。
+ * 提示行后面紧跟 inputField，光标就落在裁剪后的位置，不会跑到屏幕外。
+ */
+function printCenteredPrompt(pad, text, decorate) {
+  const cols = term.width || 80;
+  const room = Math.max(8, cols - pad.length);
+  const body = uifx.clipFor(text, room);
+  term(pad);
+  term(decorate ? decorate(body) : body);
+}
+
+/**
  * 为已有配置选择模型
  */
 async function selectModelForExisting(apiConfig) {
   term.clear();
-  term.cyan('正在获取可用模型列表...\n\n');
 
-  // 和 AURE 一样：GET /models 拉一次，返回的这份列表就是「该站点可用模型」
-  const probe = await fetchSiteModels(apiConfig.baseUrl, apiConfig.apiKey);
+  // 拉模型列表可能要几秒（站点慢时更久），包在载入动画里，避免屏幕空着发呆
+  const probe = await uifx.withLoader(
+    '正在获取可用模型列表',
+    () => fetchSiteModels(apiConfig.baseUrl, apiConfig.apiKey),
+    { tail: 'GET /models' }
+  );
   const models = probe.models;
 
   if (models.length === 0) {
-    term.red('❌ 无法从站点获取模型列表\n\n');
-    term.yellow(`原因: ${probe.error || '未知'}\n\n`);
-    term.yellow('按任意键返回...');
+    term.clear();
+    uifx.outLine(chalk.red('❌ 无法从站点获取模型列表'));
+    console.log();
+    uifx.outLine(chalk.yellow(`原因: ${probe.error || '未知'}`));
+    console.log();
+    uifx.outLine(chalk.yellow('按任意键返回...'));
     await term.inputField({ cancelable: false }).promise;
     return await selectOrAddAPI();
   }
 
-  term.green('✓ 已获取站点可用模型\n\n');
+  term.clear();
+  uifx.outLine(chalk.green(`✓ 已获取站点可用模型（共 ${models.length} 个）`));
+  console.log();
+
+  await uifx.transition('正在加载模型列表');
 
   term.clear();
-  term.cyan(`选择模型（${apiConfig.name} - 共 ${models.length} 个）：\n\n`);
+  uifx.outLine(chalk.cyan(`选择模型（${apiConfig.name} - 共 ${models.length} 个）：`));
+  console.log();
 
-  models.forEach((model, index) => {
-    term(`  ${index + 1}. ${model}\n`);
-  });
+  // 整块居中：编号列与模型名列各自成列，块整体平移到屏幕中央
+  const rows = models.map((m, index) => `  ${String(index + 1).padStart(2)}. ${m}`);
+  const pad = printCentered(rows);
 
-  term('\n');
-  term.green('请选择 (1-' + models.length + '): ');
+  console.log();
+  printCenteredPrompt(pad, '请选择 (1-' + models.length + '): ', chalk.green);
 
   const response = await term.inputField({ cancelable: false }).promise;
   const choice = parseInt(response);
@@ -646,40 +700,34 @@ async function selectModelForExisting(apiConfig) {
 }
 
 /**
- * 显示欢迎信息
- */
-function displayWelcome() {
-  term.cyan.bold('\n  █████╗ ██████╗ ██╗ ██████╗ ██████╗ ██████╗ ███████╗\n');
-  term.cyan.bold(' ██╔══██╗██╔══██╗██║██╔════╝██╔═══██╗██╔══██╗██╔════╝\n');
-  term.cyan.bold(' ███████║██████╔╝██║██║     ██║   ██║██║  ██║█████╗  \n');
-  term.cyan.bold(' ██╔══██║██╔═══╝ ██║██║     ██║   ██║██║  ██║██╔══╝  \n');
-  term.cyan.bold(' ██║  ██║██║     ██║╚██████╗╚██████╔╝██████╔╝███████╗\n');
-  term.cyan.bold(' ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝\n');
-  term.white('\n  AI 对话 CLI 工具 - 实时显示 Token 使用统计\n\n');
-}
-
-/**
  * 选择或添加 API 配置
  */
 async function selectOrAddAPI() {
   const apis = listApis();
 
   if (apis.length === 0) {
-    term.yellow('未找到已保存的 API 配置，请添加一个：\n\n');
+    term.clear();
+    uifx.outLine(chalk.yellow('未找到已保存的 API 配置，请添加一个：'));
+    console.log();
+    await uifx.transition('正在进入配置向导');
     return await addNewAPI();
   }
 
-  term.cyan('选择一个 API 配置：\n\n');
+  term.clear();
+  uifx.outLine(chalk.cyan('选择一个 API 配置'));
+  console.log();
 
-  apis.forEach((api, index) => {
-    term(`  ${index + 1}. ${api.name} - ${api.baseUrl}\n`);
-  });
+  const rows = [
+    ...apis.map((api, index) => `  ${String(index + 1).padStart(2)}. ${api.name} - ${api.baseUrl}`),
+    `  ${String(apis.length + 1).padStart(2)}. 添加新配置`,
+    `  ${String(apis.length + 2).padStart(2)}. 删除配置`,
+    `   0. 退出`
+  ];
 
-  term(`  ${apis.length + 1}. 添加新配置\n`);
-  term(`  ${apis.length + 2}. 删除配置\n`);
-  term(`  0. 退出\n\n`);
+  const pad = printCentered(rows);
 
-  term.green('请选择 (0-' + (apis.length + 2) + '): ');
+  console.log();
+  printCenteredPrompt(pad, '请选择 (0-' + (apis.length + 2) + '): ', chalk.green);
 
   const response = await term.inputField({ cancelable: true }).promise;
   const choice = parseInt(response);
@@ -691,10 +739,12 @@ async function selectOrAddAPI() {
   }
 
   if (choice === apis.length + 1) {
+    await uifx.transition('正在进入配置向导');
     return await addNewAPI();
   }
 
   if (choice === apis.length + 2) {
+    await uifx.transition('正在进入删除配置');
     return await deleteAPI();
   }
 
@@ -712,21 +762,25 @@ async function deleteAPI() {
   const apis = listApis();
 
   if (apis.length === 0) {
-    term.red('没有可删除的配置\n');
+    term.clear();
+    uifx.outLine(chalk.red('没有可删除的配置'));
     await new Promise(resolve => setTimeout(resolve, 1500));
     return await selectOrAddAPI();
   }
 
   term.clear();
-  term.red.bold('删除 API 配置\n\n');
+  uifx.outLine(chalk.red.bold('删除 API 配置'));
+  console.log();
 
-  apis.forEach((api, index) => {
-    term(`  ${index + 1}. ${api.name} - ${api.baseUrl}\n`);
-  });
+  const rows = [
+    ...apis.map((api, index) => `  ${String(index + 1).padStart(2)}. ${api.name} - ${api.baseUrl}`),
+    `   0. 返回`
+  ];
 
-  term(`  0. 返回\n\n`);
+  const pad = printCentered(rows);
 
-  term.yellow('请选择要删除的配置 (0-' + apis.length + '): ');
+  console.log();
+  printCenteredPrompt(pad, '请选择要删除的配置 (0-' + apis.length + '): ', chalk.yellow);
 
   const response = await term.inputField({ cancelable: true }).promise;
   const choice = parseInt(response);
@@ -734,21 +788,24 @@ async function deleteAPI() {
   term('\n\n');
 
   if (isNaN(choice) || choice === 0) {
+    await uifx.transition('正在返回配置列表');
     return await selectOrAddAPI();
   }
 
   if (choice >= 1 && choice <= apis.length) {
     const api = apis[choice - 1];
-    term.red(`确认删除 "${api.name}"? (y/N): `);
+    printCenteredPrompt(pad, `确认删除 "${api.name}"? (y/N): `, chalk.red);
     const confirm = await term.inputField({ cancelable: false }).promise;
 
     if (confirm.toLowerCase() === 'y' || confirm.toLowerCase() === 'yes') {
       removeApi(api.name);
-      term.green(`\n✓ 已删除 "${api.name}"\n`);
+      console.log();
+      uifx.outLine(chalk.green(`✓ 已删除 "${api.name}"`));
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 
+  await uifx.transition('正在返回配置列表');
   return await selectOrAddAPI();
 }
 
@@ -795,7 +852,10 @@ async function addNewAPI() {
 
     term.clear();
 
-    // 居中显示 Logo
+    // 居中显示 Logo —— 宽高一律按**显示列**算：
+    // 原先硬编码 logoWidth = 58，而这块 logo 实际只有 53 列，整体左偏 3 列；
+    // 标题又用 String.length 居中，「AI 对话 CLI 工具 - 配置 API」里的中文占 2 列，
+    // 于是标题比 logo 又偏出去一截。现在两者共用同一个真实宽度。
     const logoLines = [
       '  █████╗ ██████╗ ██╗ ██████╗ ██████╗ ██████╗ ███████╗',
       ' ██╔══██╗██╔══██╗██║██╔════╝██╔═══██╗██╔══██╗██╔════╝',
@@ -805,25 +865,32 @@ async function addNewAPI() {
       ' ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝'
     ];
 
-    const logoWidth = 58;
-    const startX = Math.floor((term.width - logoWidth) / 2);
+    // 整块按显示列居中；窄终端下补白退化为空串（见 ui-fx.padWidth），
+    // 每行再裁到终端宽度内 —— 这里全用 moveTo(x, y) 的**绝对行号**排版，
+    // 只要有任意一行折行，下面的输入框就会整体盖错位置，所以绝不能让它折。
+    const cols = term.width || 80;
+    const logoPad = uifx.padWidth(logoLines, cols);
+    const startX = logoPad.length + 1;
+    const room = Math.max(8, cols - logoPad.length - 1);
     let y = 3;
 
     logoLines.forEach(line => {
       term.moveTo(startX, y++);
-      term.cyan.bold(line);
+      term.cyan.bold(uifx.clipFor(line, room));
     });
 
     y += 2;
     const centerText = 'AI 对话 CLI 工具 - 配置 API';
-    term.moveTo(Math.floor((term.width - centerText.length) / 2), y);
-    term.white(centerText);
+    const textPad = logoPad.length + 1 +
+      Math.max(0, Math.floor((uifx.lineWidth(logoLines[0]) - uifx.lineWidth(centerText)) / 2));
+    term.moveTo(textPad, y);
+    term.white(uifx.clipFor(centerText, Math.max(8, cols - textPad)));
 
     y += 3;
 
-    // 绘制圆角框
-    const boxWidth = 60;
-    const boxStartX = Math.floor((term.width - boxWidth) / 2);
+    // 绘制圆角框：宽度不能超过终端（窄终端下列框会被折断），并左右各留 1 列余量
+    const boxWidth = Math.min(60, Math.max(24, cols - 4));
+    const boxStartX = Math.max(1, Math.floor((cols - boxWidth) / 2));
 
     // 站点名称输入框
     term.moveTo(boxStartX, y);
@@ -869,11 +936,8 @@ async function addNewAPI() {
     y += 4;
 
     // 检测：和 AURE 一样，GET /models 拉一次。拉到列表 = Key 有效 + 这就是可用模型（OpenAI 兼容）
-    term.moveTo(boxStartX, y);
-    term.cyan('正在检测该站点可用模型...');
-
-    let type = 'openai';
-    let models = [];
+    // 这段最多要发两次网络请求（/models 失败还会再验活一次），必须给进度反馈，
+    // 否则屏幕上只挂着一行静态文字，用户分不清是在跑还是卡死了。
     const ANTHROPIC_PRESET_MODELS = [
       'claude-opus-4-1',
       'claude-sonnet-4-5',
@@ -881,34 +945,42 @@ async function addNewAPI() {
       'claude-3-5-haiku-20241022',
       'claude-3-opus-20240229'
     ];
+
+    let type = 'openai';
+    let models = [];
     let probe = { models: [], error: null };
 
-    if (preset && preset.type === 'anthropic') {
-      // 官方 Anthropic 没有 /models 接口，直接验活 + 预设模型，不白跑一趟 /models
-      const anthropicTest = await testConnection(baseUrl, apiKey, 'anthropic');
-      if (anthropicTest.status === 'ok') {
-        type = 'anthropic';
-        models = ANTHROPIC_PRESET_MODELS;
-      } else {
-        probe.error = anthropicTest.error || 'Anthropic 接口验活失败';
-      }
-    } else {
-      probe = await fetchSiteModels(baseUrl, apiKey);
-      if (probe.models.length > 0) {
-        type = 'openai';
-        models = probe.models;
-      } else {
-        // /models 拿不到：可能是官方 Anthropic（没有 /models 接口），用一次最小 messages 请求验活
-        const anthropicTest = await testConnection(baseUrl, apiKey, 'anthropic');
-        if (anthropicTest.status === 'ok') {
-          type = 'anthropic';
-          models = ANTHROPIC_PRESET_MODELS;
+    await uifx.withLoader(
+      '正在检测该站点可用模型',
+      async () => {
+        if (preset && preset.type === 'anthropic') {
+          // 官方 Anthropic 没有 /models 接口，直接验活 + 预设模型，不白跑一趟 /models
+          const anthropicTest = await testConnection(baseUrl, apiKey, 'anthropic');
+          if (anthropicTest.status === 'ok') {
+            type = 'anthropic';
+            models = ANTHROPIC_PRESET_MODELS;
+          } else {
+            probe.error = anthropicTest.error || 'Anthropic 接口验活失败';
+          }
+        } else {
+          probe = await fetchSiteModels(baseUrl, apiKey);
+          if (probe.models.length > 0) {
+            type = 'openai';
+            models = probe.models;
+          } else {
+            // /models 拿不到：可能是官方 Anthropic（没有 /models 接口），用一次最小 messages 请求验活
+            const anthropicTest = await testConnection(baseUrl, apiKey, 'anthropic');
+            if (anthropicTest.status === 'ok') {
+              type = 'anthropic';
+              models = ANTHROPIC_PRESET_MODELS;
+            }
+          }
         }
-      }
-    }
-
-    term.moveTo(boxStartX, y);
-    term.eraseLine();
+      },
+      // 缩进到外框左边界：动画原地重画用的是「回列首 + 擦整行」，
+      // 带缩进才不会把左边框那一列擦掉。
+      { indent: ' '.repeat(boxStartX), tail: 'GET /models' }
+    );
 
     if (models.length === 0) {
       // 两条路都失败：把真实原因显示出来（401/403/超时/返回网页 等），不再只说「无法获取」
@@ -967,16 +1039,14 @@ async function addNewAPI() {
  */
 async function selectFromModelList(models, title) {
   term.clear();
-  term.cyan.bold(`\n  ${title || '选择模型'}：\n\n`);
+  uifx.outLine(chalk.cyan.bold(title || '选择模型'));
+  console.log();
 
-  models.forEach((m, index) => {
-    term(`    ${index + 1}. `);
-    term(m);
-    term('\n');
-  });
+  const rows = models.map((m, index) => `  ${String(index + 1).padStart(2)}. ${m}`);
+  const pad = printCentered(rows);
 
-  term('\n');
-  term.green(`  请选择要使用的模型 (1-${models.length}): `);
+  console.log();
+  printCenteredPrompt(pad, `请选择要使用的模型 (1-${models.length}): `, chalk.green);
   const choice = await term.inputField({ cancelable: false }).promise;
   const idx = parseInt(choice);
   term('\n\n');
@@ -1098,8 +1168,14 @@ async function selectModel(apiConfig) {
  * 运行菜单期间临时摘掉 REPL 的按键监听，避免与菜单抢按键，结束后再装回去。
  */
 async function pickModelInteractive(config, engine, ui, keyHandler) {
-  ui.showInfo('正在获取可用模型...');
-  const probe = await fetchSiteModels(config.baseUrl, config.apiKey);
+  // 拉列表期间给个载入动画；完成/失败都会把那一行擦干净再往下走
+  term.eraseLine();
+  term.column(1);
+  const probe = await uifx.withLoader(
+    '正在获取可用模型',
+    () => fetchSiteModels(config.baseUrl, config.apiKey),
+    { tail: 'GET /models' }
+  );
   const models = probe.models || [];
   if (models.length === 0) {
     ui.showError('无法获取模型列表: ' + (probe.error || '未知'));
@@ -1111,10 +1187,17 @@ async function pickModelInteractive(config, engine, ui, keyHandler) {
   const curIndex = Math.max(0, models.indexOf(config.model));
   const items = models.map((m, i) => `${i + 1}. ${m}` + (m === config.model ? '  (当前)' : ''));
 
-  // 提示行
+  // 提示行：同一行先擦掉载入动画的残留，再居中打出提示。
+  // 这条提示是最长的一行，窄终端下必须裁剪 —— 折行会把 singleColumnMenu 的行记账打乱。
+  // 颜色码在量宽时会被剥掉，所以先拼彩色串、再整体裁一次即可（不能分两段各裁各的预算）。
   term.eraseLine();
   term.column(1);
-  console.log(chalk.cyan('选择模型') + chalk.gray('（↑↓ 移动，回车确认，1-9 直接选，ESC 取消）'));
+  const hintText = '选择模型（↑↓ 移动，回车确认，1-9 直接选，ESC 取消）';
+  const hintPad = uifx.padWidth([hintText, ...items]);
+  console.log(hintPad + uifx.clipFor(
+    chalk.cyan('选择模型') + chalk.gray('（↑↓ 移动，回车确认，1-9 直接选，ESC 取消）'),
+    Math.max(8, (term.width || 80) - hintPad.length)
+  ));
 
   // 暂停 REPL 按键监听，交给菜单，结束后恢复
   if (keyHandler) term.removeListener('key', keyHandler);
@@ -1124,8 +1207,9 @@ async function pickModelInteractive(config, engine, ui, keyHandler) {
       selectedIndex: curIndex,
       cancelable: true,
       exitOnUnexpectedKey: true,
-      leftPadding: '  ',
-      selectedLeftPadding: '▶ '
+      // 菜单项不居中（列表很长，居中会左边界跳来跳去），但左边界与提示行对齐
+      leftPadding: hintPad,
+      selectedLeftPadding: hintPad.slice(0, Math.max(0, hintPad.length - 2)) + '▶ '
     }).promise;
 
     if (res && !res.canceled && res.unexpectedKey === undefined) {
@@ -1179,8 +1263,9 @@ function applyStyleChoice(id, engine, ui, config) {
 
 /**
  * 处理命令（固定输入框模式）
- * @param {{report:(r:any)=>void, pickStyle?:()=>boolean}} skillUi 由 startREPL 注入：
- *   report = 技能选入结果的文案，pickStyle = 打开 /style 的二级选择面板（返回 false 表示画不出来）
+ * @param {{report:(r:any)=>void, pickStyle?:()=>boolean, softExit?:()=>void}} skillUi 由 startREPL 注入：
+ *   report = 技能选入结果的文案，pickStyle = 打开 /style 的二级选择面板（返回 false 表示画不出来），
+ *   softExit = /exit 的界面复位（清输入行、收面板），会话状态一律不动
  */
 async function handleFixedCommand(command, engine, ui, config, keyHandler, skillUi = { report: () => {} }) {
   const parts = command.split(' ');
@@ -1193,9 +1278,11 @@ async function handleFixedCommand(command, engine, ui, config, keyHandler, skill
       ui.print(chalk.gray('  /clear  - 清空会话'));
       ui.print(chalk.gray('  /model  - 查看/切换模型'));
       ui.print(chalk.gray('  /style  - 切换表达风格（直接回车弹选择面板 ↑↓ 选；也可 /style neko、/style code）'));
+      ui.print(chalk.gray('            /style neko → 🐱 猫娘模式（只改说话语气，代码能力不变）'));
+      ui.print(chalk.gray('            /style code → 切回默认技术风格'));
       ui.print(chalk.gray('  /skills - 技能状态（/skills <名称> 加载、/skills all 重扫列表）'));
-      ui.print(chalk.gray('  /exit   - 退出'));
-      ui.print(chalk.gray('  /quit   - 退出（同 /exit）'));
+      ui.print(chalk.gray('  /exit   - 返回对话界面（不清空会话，可继续聊）'));
+      ui.print(chalk.gray('  /quit   - 退出 apicode（同 Ctrl+C）'));
       ui.print(chalk.gray('  提示：输入 / 弹出技能搜索面板，可搜索全部 ' + engine.getSkills().length + ' 个技能'));
       ui.print(chalk.gray('        打字即过滤 · ↑↓ 选择 · PgUp/PgDn 翻页 · Home/End 首尾 · 回车加载进上下文 · Esc 关闭'));
       break;
@@ -1296,6 +1383,12 @@ async function handleFixedCommand(command, engine, ui, config, keyHandler, skill
     }
 
     case '/exit':
+      // 软返回：只收拾界面，不动会话。上下文、已加载技能、待发送队列原样保留。
+      // 真正退出走 /quit 或 Ctrl+C —— 这里绝不 process.exit。
+      // 输入行与面板是 startREPL 闭包的私有状态，只能经注入的 softExit 复位。
+      if (typeof skillUi.softExit === 'function') skillUi.softExit();
+      break;
+
     case '/quit':
       ui.cleanup();
       term.clear();
