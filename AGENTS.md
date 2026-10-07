@@ -1,6 +1,6 @@
 # AGENTS.md
 
-api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API 用量追踪工具（apistat）」演进为「类 Claude Code 的 AI 编码助手 REPL」，同时保留用量统计与代理监控功能。npm 包名 `api-code-cli`，当前版本 1.2.4。
+api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API 用量追踪工具（apistat）」演进为「类 Claude Code 的 AI 编码助手 REPL」，同时保留用量统计与代理监控功能。npm 包名 `api-code-cli`，当前版本 1.2.5。
 
 ## 常用命令
 
@@ -30,7 +30,7 @@ api-code-cli（命令 `apicode`）：一个 Node.js 终端 CLI，从「AI API �
    - `term-width.js` / `skill-panel.js` — 面板的两块地基：前者按**终端显示列**量宽度（CJK 与「东亚模糊宽度」字符一律算 2 列，宁可估宽不可估窄），后者是候选面板的纯函数层（`buildItems` 挑条目、`buildLines` 出行文本、`fitsOneRowEach` 校验每行只占一行）。`bin/cli.js` 只管游标移动与按键分派。条目有三种 `type`：`cmd` / `skill` / `choice`（二级选择面板用，如 `/style`）；提示行固定为「第 N/M 项 · 窗口 a-b · …按键说明」，传 `hint` 只替换按键说明那一段，位置信息永远排在最前（窄终端截尾时先丢的是文案，不是位置）
    - `repl-fixed-ui.js` — 当前 REPL UI（固定输入行）；`repl-ui.js`、`repl-scroll-ui.js` 是旧 UI 变体；`repl-engine.js` 是无工具的旧对话引擎
    - `boot-anim.js` — 启动开屏的 550W 风格自检动画（`bin/cli.js` 的 `startREPL` 开头调用 `bootScreen`）。纯观感层：不参与会话状态，任何异常静默降级，非 TTY / `--no-anim` / `APICODE_NO_ANIM=1` 自动跳过。三条硬约束 —— 只往前打印 + `\r` 原地重画（**绝不用 `term.up()`**，没有记账就不存在漂移）、动画期间只挂一次性 stdin 监听且返回前必须摘掉并归还 raw mode（否则后面的 `inputField` 收不到输入）、每个整行输出都过 `clipLine` 裁剪兜底。**它用自己的 `glyphWidth()` 而不是 `term-width.dispWidth`**：后者把 0x2500–0x27BF 的框线/方块一律算 2 列，对面板是安全的保守方向，但会让 53 列的 logo 被误判成 106 列而拒绝绘制、排版全面失真；`glyphWidth` 按真实渲染给装饰字形算 1 列、控制字符算 0 列（`charWidth` 会把 `\n` 算成 1 列，导致裁剪时吃掉换行、多行挤成一行）。改动画前先读该文件头注释。标题框内只有 `apicode` 一个字标（原先的 `5 5 0 W` / `行星发动机 · 控制终端` 已按要求换掉）。
-   - `ui-fx.js` — 跳转页面的**居中排版 + 载入动画**（纯观感层，业务逻辑一律不碰）。`padWidth/centerLines` 按**显示列**算偏移，`withLoader/transition` 是 `\r` 原地重画的转轮。与 `boot-anim` 共用 `glyphWidth` 与 `shouldAnimate`（关闭开关只有一个：非 TTY / `--no-anim` / `APICODE_NO_ANIM=1`）。**排除项按用户要求写死**：`pickPreset`（选择供应商）与对话界面本身不居中、不加动画，别顺手"统一"了。
+   - `ui-fx.js` — 跳转页面的**居中排版 + 载入动画**（纯观感层，业务逻辑一律不碰）。`padWidth/centerLines` 按**显示列**算偏移，`withLoader/transition` 是 `\r` 原地重画的重画行。载入动画的主题是**550W 冷青扫描轨道**（`scanRail`）：亮色游标在 `▕░░░░░░░░▏` 刻度轨上来回扫，右侧跟文案 + 耗时 + 尾注。三条容易改错的点 —— ①游标走**三角波**而非取模（`head = t <= n-s ? t : period - t`），取模到端点会瞬间跳回起点，看着像卡帧；②不确定进度不画百分比（耗时不可知，停在 87% 的进度条是在说谎）；③窄终端靠 `fitLoader` **主动降级**而不是让 `clipFor` 一刀切——丢弃顺序是「尾注 → 耗时 → 轨道逐格缩短（下限 6 格）」，三样丢完才交给裁剪；裁剪会拦腰截断轨道，屏幕上出现半截进度条比不画更像故障。`fitLoader` 返回 `{cells, span, tail, showElapsed}`，**`showElapsed === false` 时必须连同 `elapsed` 文本一起不传**（否则宽度预算与实际帧不一致）。与 `boot-anim` 共用 `glyphWidth` 与 `shouldAnimate`（关闭开关只有一个：非 TTY / `--no-anim` / `APICODE_NO_ANIM=1`）。**排除项按用户要求写死**：`pickPreset`（选择供应商）与对话界面本身不居中、不加动画，别顺手"统一"了。
 2. **用量追踪层**
    - `tracker.js` — JSON 记录存储（`~/.api-usage-tracker/records.json`），addRecord / getStats
    - `interceptor.js` — wrapOpenAI / wrapAnthropic / createTrackedFetch / setupAxiosInterceptor，供第三方以库的方式自动追踪（由根 `index.js` 导出）

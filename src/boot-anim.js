@@ -206,7 +206,13 @@ function renderPlan(cols) {
   // 外框宽度：够放下 logo 与自检行即可，最多 60 列
   const boxW = full ? Math.min(avail, Math.max(48, logoW + 4, checkCols + 2)) : 0;
 
-  return { avail, logo, logoW, full, boxW, checkCols };
+  // 整块居中用的补白：取「最宽的元素」算偏移，整块一起平移。
+  // 逐行各自居中会把外框、logo、自检表的左右边界错开，看着像散架。
+  // 放不下（内容比终端还宽）就返回空串退回贴左 —— 再补白只会多折一行。
+  const contentW = Math.max(boxW, logoW, checkCols, glyphWidth('  ◈ 开机自检 / BOOT SELF-CHECK'));
+  const pad = contentW + 4 <= avail ? Math.floor((avail - contentW) / 2) : 0;
+
+  return { avail, logo, logoW, full, boxW, checkCols, pad, contentW };
 }
 
 // ─────────────────────────── 跳过 / 中断 ───────────────────────────
@@ -250,6 +256,7 @@ function installSkipHandler() {
 
 /**
  * 播放 550W 开机自检动画。所有输出都经 clipG 兜底，永不换行。
+ * 整块按 renderPlan 的 pad 居中（终端放不下时才退回贴左）。
  * @param {{version?:string, out?:NodeJS.WriteStream}} opts
  */
 async function playBootAnimation(opts = {}) {
@@ -259,11 +266,18 @@ async function playBootAnimation(opts = {}) {
   const cols = Math.max(20, (out.columns || term.width || 80));
   const plan = renderPlan(cols);
   const { avail, logo, full, boxW } = plan;
+  const pad = ' '.repeat(plan.pad);
+  const room = Math.max(8, avail - plan.pad);
 
-  // 整行输出（含收尾换行）：一律 clipLine，保证换行符不被裁掉
-  const write = (s) => out.write(clipLine(s, avail));
-  // 同一行内的原地重画（`\r` 开头、不带换行）：clipG 就够，且 \r 本身不计宽
-  const writeLine = (s) => out.write(clipG(s, avail));
+  // 整行输出（含收尾换行）：先补白再裁，保证换行符不被裁掉
+  const write = (s) => out.write(pad + clipLine(s, room));
+  // 同一行内的原地重画（`\r` 开头、不带换行）：补白必须插在 \r **之后**，
+  // 否则光标回车后补白排在最前面，整行又贴回左边界（\r 本身不计宽）
+  const writeLine = (s) => {
+    const lead = String(s).startsWith('\r') ? '\r' : '';
+    const body = lead ? String(s).slice(1) : String(s);
+    out.write(lead + clipG(pad + body, room));
+  };
   const writeRaw = (s) => out.write(s);
 
   // 外框内宽（不含左右竖线）
@@ -275,6 +289,22 @@ async function playBootAnimation(opts = {}) {
     return ' '.repeat(Math.max(0, Math.floor((inner - w) / 2))) + s;
   };
 
+  // ── 块内居中 ──────────────────────────────────────────────────────────
+  // 整块已经用 plan.pad 平移过，但块内各元素宽度不一（外框 57 / logo 53 /
+  // 自检表 42），不各自居中就会全部贴左，右侧空一大片。三个辅助：
+  //   blockW   块宽（= 最宽元素）
+  //   inBlock  一次性行（标题、页眉、页脚）各自居中并补齐到块宽
+  //   innerOff 自检表的固定偏移 —— 必须固定，进度帧和结果帧宽度不同
+  //            （42 vs 40），各自居中会让结果帧左移 1 列、在行尾留下残渣
+  const blockW = Math.max(1, plan.contentW);
+  const inBlock = (s) => {
+    const w = glyphWidth(plainOf(s));
+    const off = Math.max(0, Math.floor((blockW - w) / 2));
+    return ' '.repeat(off) + s;
+  };
+  const logoOff = ' '.repeat(Math.max(0, Math.floor((blockW - plan.logoW) / 2)));
+  const innerOff = ' '.repeat(Math.max(0, Math.floor((blockW - plan.checkCols) / 2)));
+
   const uninstallSkip = installSkipHandler();
 
   try {
@@ -282,18 +312,18 @@ async function playBootAnimation(opts = {}) {
 
     // ① 标题框：框内只有 apicode 一个字（窄终端降级为一行文字，不画框）
     if (full) {
-      write(C.dim('┌' + '─'.repeat(inner) + '┐') + '\n');
-      write(boxLine(centerIn(C.frame('a p i c o d e'))));
-      write(C.dim('└' + '─'.repeat(inner) + '┘') + '\n');
+      write(inBlock(C.dim('┌' + '─'.repeat(inner) + '┐')) + '\n');
+      write(inBlock(boxLine(centerIn(C.frame('a p i c o d e'))).replace(/\n$/, '')) + '\n');
+      write(inBlock(C.dim('└' + '─'.repeat(inner) + '┘')) + '\n');
     } else {
       write(C.frame('  apicode') + '\n');
     }
     await sleep(180);
 
-    // ② logo 逐行浮现
+    // ② logo 逐行浮现（整块一起平移，不逐行居中 —— 逐行会把字母错开）
     if (logo) {
       for (const line of logo) {
-        write(C.frame(line) + '\n');
+        write(logoOff + C.frame(line) + '\n');
         await sleep(40);
       }
     } else {
@@ -304,7 +334,7 @@ async function playBootAnimation(opts = {}) {
     await sleep(90);
 
     // ③ 自检项逐条点亮：进度条原地跑满，再换成结果
-    write(C.dim('  ◈ 开机自检 / BOOT SELF-CHECK') + '\n');
+    write(inBlock(C.dim('◈ 开机自检 / BOOT SELF-CHECK')) + '\n');
     for (const [label, result] of CHECKS) {
       const head = '  ' + C.dim('▸ ') + padTo(C.text(label), LABEL_COLS);
 
@@ -312,14 +342,15 @@ async function playBootAnimation(opts = {}) {
         const ratio = t / BAR_CELLS;
         const pct = String(Math.round(ratio * 100)).padStart(3, ' ');
         // 原地重画：\r 把光标拉回行首、不带 \n，所以用 clipG 而非 clipLine
-        writeLine('\r' + head + C.warm(bar(ratio, BAR_CELLS)) + C.ghost('  ' + pct + '%'));
+        writeLine('\r' + innerOff + head + C.warm(bar(ratio, BAR_CELLS)) + C.ghost('  ' + pct + '%'));
         await sleep(34);
       }
 
-      // 收尾这一行要换行（\n 在 clipG 之外追加，不会被裁掉）
+      // 收尾这一行要换行（\n 在 clipG 之外追加，不会被裁掉）；
+      // 结果列补齐到与进度帧同宽，否则行尾会留下上一帧的 "100%" 残渣
       writeLine(
-        '\r' + '  ' + C.ok('✔ ') + padTo(C.text(label), LABEL_COLS) +
-        C.ghost(padTo(result, BAR_CELLS + 4))
+        '\r' + innerOff + '  ' + C.ok('✔ ') + padTo(C.text(label), LABEL_COLS) +
+        C.ghost(padTo(result, BAR_CELLS + 6))
       );
       writeRaw('\n');
       await sleep(55);
@@ -329,7 +360,7 @@ async function playBootAnimation(opts = {}) {
     await sleep(80);
 
     // ④ 收束：版本号 + 就绪提示
-    write(C.dim('  apicode ') + C.warm('v' + version) + C.ghost('   AI 对话 CLI · 已就绪') + '\n');
+    write(inBlock(C.dim('apicode ') + C.warm('v' + version)) + C.ghost('   AI 对话 CLI · 已就绪') + '\n');
     writeRaw('\n');
     await sleep(120);
   } catch (e) {
