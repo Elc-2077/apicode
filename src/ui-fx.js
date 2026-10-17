@@ -67,9 +67,15 @@ function lineWidth(s) {
   return glyphWidth(plainOf(s));
 }
 
+/** 终端列数：非 TTY（管道 / CI）下 terminal-kit 会给 Infinity，必须兜底成 80 */
+function colsOf(cols) {
+  const c = cols || term.width;
+  return Number.isFinite(c) && c > 0 ? Math.floor(c) : 80;
+}
+
 /** 左侧补空格，把一行居中到 cols 列。宽度不足时至少留 2 列缩进，不贴左边界 */
 function padFor(s, cols = term.width) {
-  const c = cols || 80;
+  const c = colsOf(cols);
   const pad = Math.floor((c - lineWidth(s)) / 2);
   return ' '.repeat(pad > 0 ? pad : 2);
 }
@@ -79,7 +85,7 @@ function padFor(s, cols = term.width) {
  * 补白后仍超出 cols 的部分会裁掉 —— 居中不该换来一次物理折行。
  */
 function centerLine(s, cols = term.width) {
-  const c = cols || 80;
+  const c = colsOf(cols);
   const pad = padFor(s, c);
   return pad + clipFor(s, Math.max(8, c - pad.length));
 }
@@ -94,10 +100,11 @@ function centerLine(s, cols = term.width) {
  */
 function padWidth(lines, cols = term.width) {
   const arr = (lines || []).map((l) => String(l == null ? '' : l));
+  const c = colsOf(cols);
   const wide = arr.reduce((m, l) => Math.max(m, l === '' ? 0 : lineWidth(l)), 0);
   // 至少留 2 列边距才值得居中；放不下就贴左
-  if (wide + 4 > (cols || 80)) return '';
-  const pad = Math.floor(((cols || 80) - wide) / 2);
+  if (wide + 4 > c) return '';
+  const pad = Math.floor((c - wide) / 2);
   return ' '.repeat(pad > 0 ? pad : 0);
 }
 
@@ -108,7 +115,7 @@ function padWidth(lines, cols = term.width) {
 function centerLines(lines, cols = term.width) {
   const arr = (lines || []).map((l) => String(l == null ? '' : l));
   const pad = padWidth(arr, cols);
-  const room = Math.max(8, (cols || 80) - pad.length);
+  const room = Math.max(8, colsOf(cols) - pad.length);
   return arr.map((l) => pad + clipFor(l, room));
 }
 
@@ -147,7 +154,7 @@ function loaderFrameWidth(text, o = {}) {
 
 /** 居中输出一行普通文本（非 TTY 也照打，只是不走动画） */
 function outLine(s, opts = {}) {
-  const cols = opts.cols || term.width || 80;
+  const cols = colsOf(opts.cols);
   console.log(centerLine(s, cols));
 }
 
@@ -157,7 +164,7 @@ function outLine(s, opts = {}) {
  * @param {string} text  状态文案（中文按 2 列算宽）
  */
 async function transition(text, opts = {}) {
-  const cols = opts.cols || term.width || 80;
+  const cols = colsOf(opts.cols);
   const minMs = typeof opts.minMs === 'number' ? opts.minMs : 340;
   const avail = Math.max(8, cols - 2);
   const started = Date.now();
@@ -254,7 +261,7 @@ function fitLoader(text, cols, opts = {}) {
  */
 async function withLoader(text, task, opts = {}) {
   const minMs = typeof opts.minMs === 'number' ? opts.minMs : 520;
-  const cols = term.width || 80;
+  const cols = colsOf(term.width);
   const fit = fitLoader(text, cols, opts);
   const o = { cells: fit.cells, span: 4, tail: fit.tail };
 

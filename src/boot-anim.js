@@ -1,57 +1,59 @@
 /**
- * 550W 风格开机动画 —— 启动 apicode 时的自检序列
+ * APICode 开屏动画 —— 对外适配层
  *
- * 设计取意《流浪地球》的 550 系列量子计算机：冷色终端边框、逐条点亮的自检项、
- * 细密扫描进度条，最后收在一行版本号上。整体属于「观感层」，不参与任何逻辑：
- * 无论动画播不播、跳不跳过，后续流程完全一致。
+ * 动画本体在 `src/splash.js`（自 `apicode-splash.js` 原样引入，零依赖，自带屏幕缓冲 /
+ * 差分刷新 / 圆环扫描）。本文件只做三件事，不再自己画一帧：
  *
- * ── 关于宽度测量（本文件最容易改错的地方，动手前先读）────────────────────
- * 本文件**不用** src/term-width.js 的 dispWidth 来排版，改用下面自带的 glyphWidth()。
- * 原因：dispWidth 是「保守」测量，把 0x2500–0x27BF 的制表符/方块/几何符（─ │ █ ░ ▸ ✔ ◈）
- * 一律算 2 列。这个方向对**面板**是正确的（宁可估宽，最多整块不画，绝不会画歪），
- * 但对**装饰画**是致命的：框线宽度会被算成两倍，80 列终端下 51 列的 logo 会被误判成 102 列
- * 而「放不下」，排版全面失真。
+ *   1. 把 `bootScreen(opts)` 接到 `runSplash`，并统一时长口径：
+ *      规格原速 13.5 秒；CLI 启动阻塞 13.5 秒太久，默认压到 30%（约 4 秒），
+ *      `APICODE_SPLASH_FULL=1` 或 `--splash-full` 播原速，
+ *      `APICODE_SPLASH_DURATION=<秒>` 或 `--splash-duration <秒>` 直接指定总时长。
+ *   2. 保留宽度工具（glyphWidth / clipG / clipLine / padTo / padLeftTo / centerIn）——
+ *      `src/ui-fx.js` 与 `test-render.js` 依赖它们，且判定口径必须与动画一致。
+ *   3. 保留 `shouldAnimate()` 的唯一开关（非 TTY / `--no-anim` / `APICODE_NO_ANIM=1`），
+ *      `src/ui-fx.js` 复用它在别处也别忘了关掉动画。`colors` 同理保持原值。
  *
- * 而实测（Windows Terminal / ConHost / xterm / iTerm 默认字体）这些字形都是 **1 列**渲染的，
- * 因此这里按真实渲染给宽度表：制表符、方块元素、几何图形一律 1 列，CJK/emoji 仍由
- * term-width.charWidth 判定（那是真 2 列）。**只对动画里实际出现的字形负责** ——
- * 往动画里加新字形前，先确认它在主流终端的真实列宽，并加进 DECO_1COL 的判断里。
+ * ── 为什么不把 splash.js 整个内联进来 ────────────────────────────────────
+ *  `runSplash` 自己接管备用屏（`ESC[?1049h`）、隐藏光标、raw mode，并在结束时
+ *  `ESC[?1049l` 归还。对 CLI 来说这是干净的：它不往主屏留任何行，随后
+ *  `selectOrAddAPI()` 从空白主屏开始，`term.up(n)` 的行数记账不会被动画污染。
+ *  旧实现「在主屏逐行重画、绝不回首」是为了不碰 terminal-kit 的记账 —— 现在动画
+ *  整段在备用屏里，这个约束自然消失了。
  *
- * 风险与兜底：万一某个终端把这些字形渲染成 2 列，最坏结果只是动画某一根框线多占一行
- * （动画全程不用 term.up() 记账，且随后就进正常的 term.clear() 界面），不会污染面板记账。
- * 窄终端另有降级档（见 renderPlan），保证不会出现「框比屏幕宽」。
- *
- * ── 其他硬约束 ──────────────────────────────────────────────────────────
- *  1. 非 TTY（管道、CI、`process.stdout.isTTY` 为假）直接跳过，绝不往管道里灌色块。
- *  2. 支持 `--no-anim` / `APICODE_NO_ANIM=1` 跳过，给用户和自动化留后门。
- *  3. 不装常驻按键监听：动画期间只挂一次性 stdin data 监听用于「任意键跳过」，
- *     返回前必须摘掉并归还 raw mode，否则后面 inputField 收不到输入。
- *  4. 只往前打印；进度条靠 `\r` 回到行首原地重画，**绝不**用 term.up()。
- *  5. 每段「整行」输出前用 clipLine 按列裁剪兜底，宁可截断也不许换行。
+ * ── 尺寸门槛 ────────────────────────────────────────────────────────────
+ *  splash.js 要求至少 80×30（`MIN_W` / `MIN_H`），低于此尺寸它只会画一行提示。
+ *  与其让用户盯着「终端太小」4 秒，不如直接降级成一行纯文本启动，和管道/CI 一致。
  */
 
-const termkit = require('terminal-kit');
-const term = termkit.terminal;
 const { charWidth } = require('./term-width');
+const splash = require('./splash');
 
 // ─────────────────────────── 宽度：精确表 ───────────────────────────
 
 /**
- * 动画自用字形宽度。与 term-width.dispWidth 的区别只有一个方向：
- * 装饰字形按**真实渲染**算 1 列，而不是保守的 2 列。
+ * 动画与 ui-fx 共用的字形宽度。
  *
- * 另有一处必须修正：控制字符（\n \r \t）**不占列**。term-width.charWidth 会把
- * \n 判成 1 列，于是「整行含换行」的量宽会多出 1，裁剪时把换行符一并吃掉 ——
- * 多行就会挤成一行。这里显式归零，配合 clipLine() 双保险。
+ * 不用 term-width.dispWidth 的原因：dispWidth 是「保守」测量，把 0x2500–0x27BF 的
+ * 制表符 / 方块 / 几何符（─ │ █ ░ ▸ ✔）一律算 2 列。对面板是对的（宁可估宽），
+ * 对装饰画是致命的 —— 80 列终端下 51 列的框会被误判成 102 列而「放不下」。
+ * 这里按真实渲染给 1 列；CJK / emoji 仍交给 charWidth（那是真 2 列）。
+ *
+ * 另有一处修正：控制字符（\n \r \t）不占列。charWidth 会把 \n 判成 1 列，
+ * 于是「整行含换行」的量宽会多出 1，裁剪时把换行符一并吃掉 —— 多行挤成一行。
  */
 function glyphWidth(s) {
   let w = 0;
   for (const ch of String(s || '')) {
+    // 空串：全角字符在屏幕缓冲里的“第二格”占位符，不占列
+    // （charWidth(undefined) 会回退成 1，整行会被多算 —— 中文越多偏差越大）
+    if (!ch) continue;
     const cp = ch.codePointAt(0);
     if (cp === 0x0A || cp === 0x0D || cp === 0x09) continue;   // 换行/回车/制表：不占列
     // 制表符 / 方块元素 / 几何图形 / 装饰符：主流终端真实渲染为 1 列
     if (cp >= 0x2500 && cp <= 0x27BF) { w += 1; continue; }
     if (cp >= 0x2B00 && cp <= 0x2BFF) { w += 1; continue; }
+    // 通用标点（— – ‥ ‘ ’ 等）：终端按 1 列渲染，但 term-width 把 U+2014 判成 2 列
+    if (cp >= 0x2010 && cp <= 0x2027) { w += 1; continue; }
     // 0x1F300+ 是 emoji，真占 2 列，交给 charWidth 统一处理
     w += charWidth(cp);
   }
@@ -97,9 +99,29 @@ function padTo(s, cols) {
   return s + ' '.repeat(Math.max(0, cols - w));
 }
 
-// ─────────────────────────── 配色与素材 ───────────────────────────
+/** 按精确列宽左侧补空格（居中/右对齐用） */
+function padLeftTo(s, cols) {
+  const w = glyphWidth(plainOf(s));
+  return ' '.repeat(Math.max(0, cols - w)) + s;
+}
 
-// 统一的冷色调：550W 是冷青，只有数值/进度用暖橙提亮
+/** 按精确列宽居中：返回「左补白 + s」 */
+function centerIn(s, cols) {
+  const w = glyphWidth(plainOf(s));
+  return ' '.repeat(Math.max(0, Math.floor((cols - w) / 2))) + s;
+}
+
+// ─────────────────────────── 调色板（对外契约）───────────────────────────
+
+/**
+ * 对外共享的语义色（**保持 1.2.x 的值不变**）。
+ *
+ * src/ui-fx.js:26 运行时解构它渲染跳转页的扫描轨道（dim=轨道刻度、frame=游标、
+ * text=状态文案、ghost=耗时与尾注）。开屏换主题不该连带把跳转页也换掉，
+ * 所以这里原封不动，只保证六个 key 都在且都是函数。
+ *
+ * 开屏自己的配色在 splash.js 的 COL 表里（规格要求的白底黑字），与本表无关。
+ */
 const C = {
   frame: (s) => `\x1b[38;5;51m${s}\x1b[0m`,   // 亮青 —— 边框、标题
   dim: (s) => `\x1b[38;5;30m${s}\x1b[0m`,     // 暗青 —— 分隔线
@@ -109,76 +131,87 @@ const C = {
   ghost: (s) => `\x1b[38;5;240m${s}\x1b[0m`   // 灰 —— 次要信息
 };
 
-/** 完整 logo（真实约 51 列，宽终端用） */
-const LOGO_FULL = [
-  '  █████╗ ██████╗ ██╗ ██████╗ ██████╗ ██████╗ ███████╗',
-  ' ██╔══██╗██╔══██╗██║██╔════╝██╔═══██╗██╔══██╗██╔════╝',
-  ' ███████║██████╔╝██║██║     ██║   ██║██║  ██║█████╗  ',
-  ' ██╔══██║██╔═══╝ ██║██║     ██║   ██║██║  ██║██╔══╝  ',
-  ' ██║  ██║██║     ██║╚██████╗╚██████╔╝██████╔╝███████╗',
-  ' ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝'
-];
+// ─────────────────────────── 时长口径 ───────────────────────────
 
-/** 紧凑 logo（真实约 38 列，80 列终端与中等宽度用） */
-const LOGO_COMPACT = [
-  '  ___  ___  ___ ___  ___  ___  ___ ___',
-  ' / _ \\| _ \\|_ _/ __|/ _ \\|   \\| __| __|',
-  '| |_| |  _/ | | (__| (_) | |) | _|| _| ',
-  ' \\___/|_|  |___\\___|\\___/|___/|___|___|'
-];
+/** 默认播放规格时长的 30%（13.5s → 约 4s），阶段顺序与占比完全不变 */
+const DEFAULT_SCALE = 0.30;
 
-/** 自检项：[标签, 结果]，结果压到 12 列内，保证窄终端也能整行放下 */
-const CHECKS = [
-  ['量子运算核心', '3,000 QPU'],
-  ['行星发动机链路', '8,127 台在线'],
-  ['地月通信信道', '延迟 1.28 s'],
-  ['领航员空间站', '信标已锁定'],
-  ['AI 推理引擎', '等待接入'],
-  ['文件系统沙箱', '危险操作确认']
-];
+/** 读 `--flag value` / `--flag=value`，返回字符串或 undefined */
+function argValue(name) {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === name) return argv[i + 1];
+    if (argv[i].startsWith(name + '=')) return argv[i].slice(name.length + 1);
+  }
+  return undefined;
+}
 
-// 标签栏占位：必须覆盖**整段 head**（缩进 2 + 标记 2 + 标签）而不是只有标签本身。
-// 最长标签「行星发动机链路」= 14 列，加上「  ▸ 」共 18 列 —— 写成 14 会让 padTo 对最长那项
-// 完全不生效，结果列直接顶在标签上（已踩过）。
-const LABEL_COLS = 18;
-const BAR_CELLS = 14;    // 进度条格数
-const MIN_FULL_COLS = 52; // 低于此宽度走紧凑档（不放外框）
+/**
+ * 解析总时长（秒）。
+ *   优先级：显式 duration 参数 > --splash-duration > APICODE_SPLASH_DURATION
+ *          > （--splash-full / APICODE_SPLASH_FULL=1 → 13.5）> 4.05
+ */
+function resolveDuration(explicit) {
+  const num = (v) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  if (num(explicit) !== null) return num(explicit);
 
-// 「任意键跳过」的共享标志；sleep 会轮询它以便即时中断
-let skipped = false;
+  const fromArg = num(argValue('--splash-duration'));
+  if (fromArg !== null) return fromArg;
 
-// ─────────────────────────── 小工具 ───────────────────────────
+  const fromEnv = num(process.env.APICODE_SPLASH_DURATION);
+  if (fromEnv !== null) return fromEnv;
 
-/** 分片 sleep，被跳过时立即返回 */
-function sleep(ms) {
-  if (skipped) return Promise.resolve();
-  return new Promise((resolve) => {
-    const started = Date.now();
-    const iv = setInterval(() => {
-      if (skipped || Date.now() - started >= ms) {
-        clearInterval(iv);
-        resolve();
-      }
-    }, 15);
+  const full = process.env.APICODE_SPLASH_FULL === '1'
+    || process.argv.slice(2).includes('--splash-full');
+  return full ? splash.TOTAL : splash.TOTAL * DEFAULT_SCALE;
+}
+
+// ─────────────────────────── 播放 ───────────────────────────
+
+/**
+ * 播放开屏动画。整段在备用屏里完成，返回后主屏是干净的。
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.version]     显示在 `REV <version>` 里
+ * @param {NodeJS.WriteStream} [opts.out] 输出流（测试注入假流）
+ * @param {number} [opts.duration]    总时长（秒）；缺省走 resolveDuration()
+ * @param {number} [opts.scale]       时长倍率（= duration / 13.5），1.2.x 兼容参数
+ * @param {boolean} [opts.reduced]    减少动态效果：只显示各阶段稳定画面
+ * @param {number} [opts.ringSpeed]   圆环旋转速度倍率
+ */
+async function playBootAnimation(opts = {}) {
+  const duration = opts.scale !== undefined
+    ? splash.TOTAL * opts.scale
+    : resolveDuration(opts.duration);
+
+  return splash.runSplash({
+    version: opts.version,
+    out: opts.out,
+    duration,
+    reduced: opts.reduced,
+    ringSpeed: opts.ringSpeed
   });
 }
 
-/** 扫描进度条：满格用 █，空格用 ░（都按 1 列计） */
-function bar(ratio, cells) {
-  const filled = Math.max(0, Math.min(cells, Math.round(ratio * cells)));
-  return '█'.repeat(filled) + '░'.repeat(cells - filled);
-}
+/**
+ * 启动开屏：能播动画就播，否则退回一行纯文本降级。
+ * 终端小于动画的最低尺寸（80×30）时也走这条降级 —— 比盯着「终端太小」4 秒好。
+ */
+async function bootScreen(opts = {}) {
+  const version = opts.version || '0.0.0';
+  const out = opts.out || process.stdout;
 
-/** 一个 logo 变体的最大行宽（不能用第 0 行代替：COMPACT 的第 2 行比第 0 行宽） */
-function logoWidth(logo) {
-  return logo.reduce((m, l) => Math.max(m, glyphWidth(l)), 0);
-}
+  const tooSmall = (out.columns || 0) > 0 && (out.columns < splash.MIN_W || out.rows < splash.MIN_H);
+  if (!shouldAnimate() || tooSmall) {
+    // 非 TTY / 显式跳过 / 终端太小：纯文本，绝不灌色块（日志、CI、小窗口都可读）
+    out.write('APICode v' + version + ' · AI 对话 CLI\n');
+    return;
+  }
 
-/** 按可用列宽挑 logo 变体；太窄返回 null（调用侧退回纯文字） */
-function pickLogo(cols) {
-  if (logoWidth(LOGO_FULL) <= cols) return LOGO_FULL;
-  if (logoWidth(LOGO_COMPACT) <= cols) return LOGO_COMPACT;
-  return null;
+  await playBootAnimation({ version, out, duration: opts.duration, reduced: opts.reduced, ringSpeed: opts.ringSpeed });
 }
 
 /** 是否应该播放动画：非 TTY / 显式跳过 → false */
@@ -190,217 +223,25 @@ function shouldAnimate() {
   return true;
 }
 
-/**
- * 排版计划：把「终端宽度 → 用哪个 logo、框多宽、是否放外框」算清楚。
- * 纯函数，便于按宽度单测。out = 输出流（默认 stdout，测试可注入）。
- */
-function renderPlan(cols) {
-  const avail = Math.max(16, cols - 2);      // 左右各留 1 列保险
-  const logo = pickLogo(avail);
-  const logoW = logo ? logoWidth(logo) : 0;
-
-  // 自检行真实宽度：缩进2 + 标记2 + 标签14 + 空格2 + 条14 + 空格2 + 结果/百分比（= LABEL_COLS + 2 + 14 + 2 + 6）
-  const checkCols = LABEL_COLS + 2 + BAR_CELLS + 8;
-
-  const full = avail >= MIN_FULL_COLS;
-  // 外框宽度：够放下 logo 与自检行即可，最多 60 列
-  const boxW = full ? Math.min(avail, Math.max(48, logoW + 4, checkCols + 2)) : 0;
-
-  // 整块居中用的补白：取「最宽的元素」算偏移，整块一起平移。
-  // 逐行各自居中会把外框、logo、自检表的左右边界错开，看着像散架。
-  // 放不下（内容比终端还宽）就返回空串退回贴左 —— 再补白只会多折一行。
-  const contentW = Math.max(boxW, logoW, checkCols, glyphWidth('  ◈ 开机自检 / BOOT SELF-CHECK'));
-  const pad = contentW + 4 <= avail ? Math.floor((avail - contentW) / 2) : 0;
-
-  return { avail, logo, logoW, full, boxW, checkCols, pad, contentW };
-}
-
-// ─────────────────────────── 跳过 / 中断 ───────────────────────────
-
-/**
- * 挂一次性「任意键跳过」监听，返回卸载函数 —— 必须在动画结束时调用，
- * 把 stdin 干净地还给 terminal-kit。
- *
- * raw mode 会吞掉 Ctrl+C（变成普通字节 0x03 而非 SIGINT），这里显式识别并恢复
- * 「Ctrl+C 立刻退出」的直觉行为 —— 启动阶段不该因为动画让用户觉得按键失灵。
- */
-function installSkipHandler() {
-  const onData = (buf) => {
-    if (buf && buf.length && buf[0] === 0x03) {
-      try { process.stdin.setRawMode(false); } catch (e) { /* ignore */ }
-      process.stdout.write('\n');
-      process.exit(130);   // 128 + SIGINT
-    }
-    skipped = true;
-  };
-
-  try {
-    if (!process.stdin.isTTY) return () => {};
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.on('data', onData);
-  } catch (e) {
-    return () => {};   // 拿不到 stdin（某些 Windows 终端）就退化成「不能跳过」
-  }
-
-  return () => {
-    try {
-      process.stdin.removeListener('data', onData);
-      process.stdin.setRawMode(false);
-      process.stdin.pause();
-    } catch (e) { /* 归还失败不影响启动 */ }
-  };
-}
-
-// ─────────────────────────── 主体 ───────────────────────────
-
-/**
- * 播放 550W 开机自检动画。所有输出都经 clipG 兜底，永不换行。
- * 整块按 renderPlan 的 pad 居中（终端放不下时才退回贴左）。
- * @param {{version?:string, out?:NodeJS.WriteStream}} opts
- */
-async function playBootAnimation(opts = {}) {
-  const version = opts.version || '0.0.0';
-  const out = opts.out || process.stdout;
-
-  const cols = Math.max(20, (out.columns || term.width || 80));
-  const plan = renderPlan(cols);
-  const { avail, logo, full, boxW } = plan;
-  const pad = ' '.repeat(plan.pad);
-  const room = Math.max(8, avail - plan.pad);
-
-  // 整行输出（含收尾换行）：先补白再裁，保证换行符不被裁掉
-  const write = (s) => out.write(pad + clipLine(s, room));
-  // 同一行内的原地重画（`\r` 开头、不带换行）：补白必须插在 \r **之后**，
-  // 否则光标回车后补白排在最前面，整行又贴回左边界（\r 本身不计宽）
-  const writeLine = (s) => {
-    const lead = String(s).startsWith('\r') ? '\r' : '';
-    const body = lead ? String(s).slice(1) : String(s);
-    out.write(lead + clipG(pad + body, room));
-  };
-  const writeRaw = (s) => out.write(s);
-
-  // 外框内宽（不含左右竖线）
-  const inner = full ? boxW - 2 : 0;
-  const boxLine = (content) =>
-    C.dim('│') + padTo(clipG(content, inner), inner) + C.dim('│') + '\n';
-  const centerIn = (s) => {
-    const w = glyphWidth(plainOf(s));
-    return ' '.repeat(Math.max(0, Math.floor((inner - w) / 2))) + s;
-  };
-
-  // ── 块内居中 ──────────────────────────────────────────────────────────
-  // 整块已经用 plan.pad 平移过，但块内各元素宽度不一（外框 57 / logo 53 /
-  // 自检表 42），不各自居中就会全部贴左，右侧空一大片。三个辅助：
-  //   blockW   块宽（= 最宽元素）
-  //   inBlock  一次性行（标题、页眉、页脚）各自居中并补齐到块宽
-  //   innerOff 自检表的固定偏移 —— 必须固定，进度帧和结果帧宽度不同
-  //            （42 vs 40），各自居中会让结果帧左移 1 列、在行尾留下残渣
-  const blockW = Math.max(1, plan.contentW);
-  const inBlock = (s) => {
-    const w = glyphWidth(plainOf(s));
-    const off = Math.max(0, Math.floor((blockW - w) / 2));
-    return ' '.repeat(off) + s;
-  };
-  const logoOff = ' '.repeat(Math.max(0, Math.floor((blockW - plan.logoW) / 2)));
-  const innerOff = ' '.repeat(Math.max(0, Math.floor((blockW - plan.checkCols) / 2)));
-
-  const uninstallSkip = installSkipHandler();
-
-  try {
-    writeRaw('\n');
-
-    // ① 标题框：框内只有 apicode 一个字（窄终端降级为一行文字，不画框）
-    if (full) {
-      write(inBlock(C.dim('┌' + '─'.repeat(inner) + '┐')) + '\n');
-      write(inBlock(boxLine(centerIn(C.frame('a p i c o d e'))).replace(/\n$/, '')) + '\n');
-      write(inBlock(C.dim('└' + '─'.repeat(inner) + '┘')) + '\n');
-    } else {
-      write(C.frame('  apicode') + '\n');
-    }
-    await sleep(180);
-
-    // ② logo 逐行浮现（整块一起平移，不逐行居中 —— 逐行会把字母错开）
-    if (logo) {
-      for (const line of logo) {
-        write(logoOff + C.frame(line) + '\n');
-        await sleep(40);
-      }
-    } else {
-      write(C.frame('APICODE') + '\n');
-    }
-
-    writeRaw('\n');
-    await sleep(90);
-
-    // ③ 自检项逐条点亮：进度条原地跑满，再换成结果
-    write(inBlock(C.dim('◈ 开机自检 / BOOT SELF-CHECK')) + '\n');
-    for (const [label, result] of CHECKS) {
-      const head = '  ' + C.dim('▸ ') + padTo(C.text(label), LABEL_COLS);
-
-      for (let t = 1; t <= BAR_CELLS && !skipped; t++) {
-        const ratio = t / BAR_CELLS;
-        const pct = String(Math.round(ratio * 100)).padStart(3, ' ');
-        // 原地重画：\r 把光标拉回行首、不带 \n，所以用 clipG 而非 clipLine
-        writeLine('\r' + innerOff + head + C.warm(bar(ratio, BAR_CELLS)) + C.ghost('  ' + pct + '%'));
-        await sleep(34);
-      }
-
-      // 收尾这一行要换行（\n 在 clipG 之外追加，不会被裁掉）；
-      // 结果列补齐到与进度帧同宽，否则行尾会留下上一帧的 "100%" 残渣
-      writeLine(
-        '\r' + innerOff + '  ' + C.ok('✔ ') + padTo(C.text(label), LABEL_COLS) +
-        C.ghost(padTo(result, BAR_CELLS + 6))
-      );
-      writeRaw('\n');
-      await sleep(55);
-    }
-
-    writeRaw('\n');
-    await sleep(80);
-
-    // ④ 收束：版本号 + 就绪提示
-    write(inBlock(C.dim('apicode ') + C.warm('v' + version)) + C.ghost('   AI 对话 CLI · 已就绪') + '\n');
-    writeRaw('\n');
-    await sleep(120);
-  } catch (e) {
-    // 动画是观感层，任何异常都不该拦住启动 —— 静默降级
-  } finally {
-    uninstallSkip();
-  }
-}
-
-/**
- * 启动开屏：能播动画就播，否则退回静态 logo。
- * 非 TTY 时只打印纯文本行，保证日志/管道可读。
- */
-async function bootScreen(opts = {}) {
-  const version = opts.version || '0.0.0';
-  const out = opts.out || process.stdout;
-  const cols = Math.max(20, (out.columns || term.width || 80));
-  const plan = renderPlan(cols);
-
-  if (!shouldAnimate()) {
-    if (plan.logo) {
-      plan.logo.forEach((l) => out.write(l + '\n'));
-    }
-    out.write('\n  apicode v' + version + ' · AI 对话 CLI\n\n');
-    return;
-  }
-
-  skipped = false;   // 允许 /exit 回主菜单后再播一次
-  await playBootAnimation({ version, out });
-}
-
 module.exports = {
+  // 启动
   bootScreen,
   playBootAnimation,
   shouldAnimate,
-  pickLogo,
-  renderPlan,
+  // 宽度工具（ui-fx / test-render 依赖）
   glyphWidth,
+  plainOf,
   clipG,
-  LOGO_FULL,
-  LOGO_COMPACT,
-  colors: C
+  clipLine,
+  padTo,
+  padLeftTo,
+  centerIn,
+  // 颜色契约（ui-fx 依赖）
+  colors: C,
+  // 动画本体（规格时间轴、圆环参数都从这里直接取，便于调参）
+  TOTAL: splash.TOTAL,
+  RING: splash.RING,
+  render: splash.render,
+  Screen: splash.Screen,
+  Canvas: splash.Canvas
 };
