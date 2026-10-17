@@ -9,14 +9,15 @@
  * 纯展示性动画：身份资料、状态值均为演示占位，不构成任何真实的授权或认证。
  *
  * 用法
- *   node apicode-splash.js                 播放完整动画 (~13.5 秒)
- *   node apicode-splash.js --wait          授权/身份两步停下，等待 Enter / Space
+ *   node apicode-splash.js                 播放完整动画 (~15 秒)
+ *   node apicode-splash.js --wait          授权/身份两步停下，等待长按 Enter
  *   node apicode-splash.js --duration 20   调整总时长（秒）
  *   node apicode-splash.js --ring-speed 2  调整圆环旋转速度（倍率）
  *   node apicode-splash.js --reduced       减少动态效果：只显示各阶段稳定画面
  *   node apicode-splash.js -- <命令...>    动画结束后启动你原有的程序
  *
- * 按键：Enter / Space 确认当前步骤；S / Q / Esc 跳过；Ctrl-C 退出。
+ * 按键：长按 Enter / Space 确认当前步骤；S / Q / Esc 跳过；Ctrl-C 退出。
+ * 两步停靠点（授权、身份）都必须长按才放行，等待时间是真实时钟，不计入 duration。
  *
  * 作为模块使用：
  *   const { runSplash } = require('./apicode-splash');
@@ -31,7 +32,7 @@ const { spawn } = require('child_process');
 
 /* ═════════════════════ 1. 可调参数 ═════════════════════ */
 
-const TOTAL = 13.5; // 默认总时长（秒）。改播放时长用 --duration，不要改这里的各阶段时间。
+const TOTAL = 13.5; // 设计时间轴的长度（秒）：STAGE_AT / RING 都按它编排。改播放时长用 --duration，不要改这里的各阶段时间。
 
 // 七个阶段的起点（秒）
 const STAGE_AT = [0, 1, 3, 5, 6, 10, 12];
@@ -456,11 +457,22 @@ function button(S, cx, y, w, cn, en, T, t0, outT, press) {
   S.textC(cx, y + 2, en, press > 0.3 ? COL.ink : COL.mid, { a: tv.a });
 }
 
+/* ── 长按提示：文字 + 蓄力槽。只在停靠点出现；按住时整条由灰转橙 ── */
 function hintLine(S, G, T, st) {
   const v = vis(T, st.t0, 0.4, st.out, 0.25);
+  const atHold = T >= st.hold - 0.05;
+  const charge = Math.max(0, st.charge === undefined ? -1 : st.charge);
   let a = v.a;
-  if (st.pulse !== undefined && T >= st.hold - 0.05) a *= 0.55 + 0.45 * st.pulse; // --wait 时轻微呼吸
-  S.textC(G.cx, st.y, '按 Enter / Space 继续', COL.gray, { a }, G.W - 3);
+  if (atHold && st.pulse !== undefined) a *= 0.55 + 0.45 * st.pulse; // 停靠时轻微呼吸
+  S.textC(G.cx, st.y, '长按 ENTER 继续', COL.gray, { a }, G.W - 3);
+
+  // 蓄力槽：宽 24 列，已蓄力部分为橙色实线；松手会回落，不是一次按键就跳满。
+  if (atHold && st.charge !== undefined && a > 0.03) {
+    const n = 24, x = Math.floor(G.cx - n / 2), fillN = Math.round(clamp(charge) * n);
+    for (let i = 0; i < n; i++) {
+      S.put(x + i, st.y + 1, i < fillN ? '━' : '─', i < fillN ? blend(COL.orange, COL.bg, a) : blend(COL.line, COL.bg, a));
+    }
+  }
 }
 
 /* ── 圆环扫描装置 ── */
@@ -610,7 +622,7 @@ function center(S, cv, G, T, ctx) {
     const dl = Math.round(40 * dv);
     S.text(Math.floor(cx - dl / 2), 12, '─'.repeat(dl), COL.line);
     button(S, cx, 14, 30, '授予访问权限', 'GRANT ACCESS', T, 2.05, 3.15, ramp(T, 2.75, 0.2));
-    hintLine(S, G, T, { t0: 2.5, out: 3.05, y: 19, pulse: ctx.pulse, hold: 2.72 });
+    hintLine(S, G, T, { t0: 2.5, out: 3.05, y: 19, pulse: ctx.pulse, hold: 2.72, charge: ctx.hold });
   }
 
   /* 阶段三：身份资料确认 */
@@ -626,7 +638,7 @@ function center(S, cv, G, T, ctx) {
       S.text(x + 20, 13 + i, val, COL.ink, { a: r.a });
     });
     button(S, cx, 18, 34, '确认身份', 'CONFIRM IDENTITY', T, 4.3, 5.1, ramp(T, 4.75, 0.2));
-    hintLine(S, G, T, { t0: 4.5, out: 5.0, y: 23, pulse: ctx.pulse, hold: 4.72 });
+    hintLine(S, G, T, { t0: 4.5, out: 5.0, y: 23, pulse: ctx.pulse, hold: 4.72, charge: ctx.hold });
   }
 
   /* 阶段四、五：标志 → 扫描装置 */
@@ -665,7 +677,7 @@ function render(T, W, H, st = {}) {
   const G = geom(W, H);
   const S = new Screen(W, H), cv = new Canvas(W, H);
   const name = st.name || defaultName();
-  const ctx = { name, id: idFor(name), ringSpeed: st.ringSpeed || 1, pulse: st.pulse };
+  const ctx = { name, id: idFor(name), ringSpeed: st.ringSpeed || 1, pulse: st.pulse, hold: st.hold === undefined ? -1 : st.hold };
   backdrop(S, G, T);
   brand(S, G, T, st.version);
   skipHint(S, G, T);
@@ -740,6 +752,25 @@ function diffOutput(prev, cur, sgr) {
 
 const MIN_W = 80, MIN_H = 30;
 
+// 长按确认：在停靠点（授权 2.72 / 身份 4.72）按住 Enter 或 Space 满 HOLD_MS 才放行。
+// 计的是真实时间（performance.now），与虚拟时钟 vt 无关 —— vt 在停靠点被钳住不动，
+// 所以长按期间底部的总进度条、圆环、状态文案全部定在原处，不会偷偷往前跑。
+// 毫秒值给得比终端按键重复率宽一点：Windows Terminal 初始重复延迟约 500 ms，
+// 这一段用 HOLD_GAP_MS 容忍，之后按 30 次/秒的重复速率每帧都能续上。
+const HOLD_MS = 900;      // 需要按住多久（毫秒）
+const HOLD_GAP_MS = 620;  // 两次按键字节之间允许的最大间隔；超过视为松手
+const HOLD_DECAY = 2.6;   // 松手后蓄力条的回落速度（1/秒）
+
+/** 停靠点共享状态：-1 表示尚未开始，1 表示已满、放行中 */
+function makeHolds(wait) {
+  return wait
+    ? [
+        { t: 2.72, released: false, charge: -1, lastKey: 0 },
+        { t: 4.72, released: false, charge: -1, lastKey: 0 }
+      ]
+    : [];
+}
+
 function runSplash(opts = {}) {
   return new Promise((resolve) => {
     const out = opts.out || process.stdout, inp = process.stdin;
@@ -752,7 +783,8 @@ function runSplash(opts = {}) {
     if (!out.isTTY) { out.write('APICode · APICODE HARNESS\n'); return resolve(); }
 
     let W = out.columns, H = out.rows, prev = null, vt = 0, skipAt = null, done = false;
-    const holds = opts.wait ? [{ t: 2.72, released: false }, { t: 4.72, released: false }] : [];
+    let holdCharge = -1;   // 当前停靠点的长按蓄力 0..1；-1 表示不在停靠点
+    const holds = makeHolds(opts.wait && inp.isTTY);   // stdin 不是 TTY 时没人能按键：不停靠
     let ready = !opts.ready; if (opts.ready) Promise.resolve(opts.ready).then(() => { ready = true; }, () => { ready = true; });
     const REDUCED = [0.95, 2.7, 4.7, 5.95, 9.9, 12.4];
     let last = process.hrtime.bigint(), elapsed = 0;
@@ -781,10 +813,14 @@ function runSplash(opts = {}) {
       if (s === '\x03') { cleanup(); process.exit(130); }
       if (skipAt === null && (s === '\x1b' || /^[sSqQ]$/.test(s))) { skipAt = performance.now(); return; }
       if (s === '\r' || s === '\n' || s === ' ') {
-        if (vt >= 1 && vt < 2.72) { vt = 2.72; if (holds[0]) holds[0].released = true; }
-        else if (vt >= 2.72 && vt < 3) { if (holds[0]) holds[0].released = true; }
-        else if (vt >= 3 && vt < 4.72) { vt = 4.72; if (holds[1]) holds[1].released = true; }
-        else if (vt >= 4.72 && vt < 5) { if (holds[1]) holds[1].released = true; }
+        const h = holds.find((x) => !x.released);
+        if (!h) return;
+        // 长按蓄力：第一次按键（或松手后再按）开始计时，重复字节只续期。
+        // 只认停靠点附近的按键，前面的阶段乱按不会提前蓄力。
+        const now = performance.now();
+        if (vt < h.t - 0.05) return;
+        if (h.charge < 0 || now - h.lastKey > HOLD_GAP_MS) h.charge = 0;
+        h.lastKey = now;
       }
     }
 
@@ -797,6 +833,25 @@ function runSplash(opts = {}) {
       } else {
         vt += dt * speed;
         for (const h of holds) if (!h.released && vt > h.t) vt = h.t;
+        // 长按判定：vt 已被钳在停靠点，这里只看真实时间。按住满 HOLD_MS 就放行，
+        // 松手（超过 HOLD_GAP_MS 没有新按键）则蓄力回落，重新按住从头再来。
+        const now = performance.now();
+        let live = null;
+        for (const h of holds) {
+          if (h.released) continue;
+          if (vt < h.t - 0.05) break;               // 还没到停靠点
+          live = h; break;
+        }
+        for (const h of holds) {
+          if (h.released || h.charge < 0) continue;
+          if (now - h.lastKey > HOLD_GAP_MS) {
+            h.charge = Math.max(-1, h.charge - dt * HOLD_DECAY);   // 松手：回落
+          } else if (h === live) {
+            h.charge += dt;                                         // 按住：累计
+            if (h.charge >= HOLD_MS / 1000) { h.released = true; h.charge = -1; }
+          }
+        }
+        holdCharge = live ? Math.max(0, live.charge) : -1;
         if (!ready && vt > 12.5) vt = 12.5; // 真实初始化未完成：停在欢迎画面
       }
       let fade = 0;
@@ -809,7 +864,7 @@ function runSplash(opts = {}) {
         S.textC(W / 2, Math.floor(H / 2), `终端太小 · 需要至少 ${MIN_W}×${MIN_H}（当前 ${W}×${H}）`, COL.ink);
       } else {
         const pulse = 0.5 + 0.5 * Math.sin(elapsed * 3);
-        S = render(vt, W, H, { name: opts.name, ringSpeed: opts.ringSpeed, pulse, fade, version: opts.version });
+        S = render(vt, W, H, { name: opts.name, ringSpeed: opts.ringSpeed, pulse, fade, version: opts.version, hold: holdCharge });
       }
       write('\x1b[?2026h' + diffOutput(prev, S, sgr) + '\x1b[?2026l');
       prev = S;
@@ -846,14 +901,14 @@ const HELP = `APICode 开屏启动动画（CLI）
 
   node apicode-splash.js [选项] [-- 动画结束后要启动的命令]
 
-  --duration <秒>     总时长，默认 13.5
+  --duration <秒>     总时长，默认 15（不含两处长按停靠的等待）
   --ring-speed <倍率> 圆环旋转速度倍率，默认 1
-  --wait              授权、身份两步停下，等待 Enter / Space
+  --wait              授权、身份两步停下，等待长按 Enter
   --reduced           减少动态效果（逐阶段显示稳定画面）；也可设环境变量 REDUCED_MOTION=1
   --name <名字>       身份资料里显示的名字（演示占位），默认取系统用户名
   --fps <帧率>        默认 30
 
-  按键：Enter / Space 确认 · S / Q / Esc 跳过 · Ctrl-C 退出
+  按键：长按 Enter / Space 确认 · S / Q / Esc 跳过 · Ctrl-C 退出
   终端需至少 ${MIN_W}×${MIN_H}；建议 120×40 以上，并使用支持 24 位真彩色的终端。
 `;
 

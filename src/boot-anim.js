@@ -5,8 +5,10 @@
  * 差分刷新 / 圆环扫描）。本文件只做三件事，不再自己画一帧：
  *
  *   1. 把 `bootScreen(opts)` 接到 `runSplash`，并统一时长口径：
- *      规格原速 13.5 秒，默认就按原速完整播放；
- *      `APICODE_SPLASH_FAST=1` 或 `--splash-fast` 压到 30%（约 4 秒），
+ *      规格原速 15 秒（自 1.3.x 的 13.5 秒延长，各阶段按比例放慢、顺序与占比不变），
+ *      默认就按原速完整播放；途中在「授予访问权限」「确认身份」两处停靠，
+ *      必须长按 Enter 才继续 —— 停靠等待走真实时钟，不计入这 15 秒。
+ *      `APICODE_SPLASH_FAST=1` 或 `--splash-fast` 压到 30%（约 4.5 秒），
  *      `APICODE_SPLASH_DURATION=<秒>` 或 `--splash-duration <秒>` 直接指定总时长。
  *   2. 保留宽度工具（glyphWidth / clipG / clipLine / padTo / padLeftTo / centerIn）——
  *      `src/ui-fx.js` 与 `test-render.js` 依赖它们，且判定口径必须与动画一致。
@@ -133,10 +135,10 @@ const C = {
 
 // ─────────────────────────── 时长口径 ───────────────────────────
 
-/** 默认按规格原速播放（13.5 秒），阶段顺序与占比与规格完全一致 */
-const DEFAULT_SCALE = 1;
+/** 默认播放时长（秒）。自 1.3.x 的 13.5 秒延长到 15 秒：splash.js 的各阶段时间轴不动，只是整体放慢，顺序与占比完全一致。 */
+const DEFAULT_DURATION = 15;
 
-/** 快速档：30%（约 4 秒），只想赶紧进主界面时用 */
+/** 快速档：30%（约 4.5 秒），只想赶紧进主界面时用 */
 const FAST_SCALE = 0.30;
 
 /** 读 `--flag value` / `--flag=value`，返回字符串或 undefined */
@@ -150,9 +152,9 @@ function argValue(name) {
 }
 
 /**
- * 解析总时长（秒）。
+ * 解析总时长（秒）。这里的秒数是「动画自己的 15 秒」，不含两处长按停靠的等待。
  *   优先级：显式 duration 参数 > --splash-duration > APICODE_SPLASH_DURATION
- *          > （--splash-fast / APICODE_SPLASH_FAST=1 → 4.05）> 13.5
+ *          > （--splash-fast / APICODE_SPLASH_FAST=1 → 15 × 0.3）> 15
  */
 function resolveDuration(explicit) {
   const num = (v) => {
@@ -169,7 +171,7 @@ function resolveDuration(explicit) {
 
   const fast = process.env.APICODE_SPLASH_FAST === '1'
     || process.argv.slice(2).includes('--splash-fast');
-  return splash.TOTAL * (fast ? FAST_SCALE : DEFAULT_SCALE);
+  return DEFAULT_DURATION * (fast ? FAST_SCALE : 1);
 }
 
 // ─────────────────────────── 播放 ───────────────────────────
@@ -184,6 +186,7 @@ function resolveDuration(explicit) {
  * @param {number} [opts.scale]       时长倍率（= duration / 13.5），1.2.x 兼容参数
  * @param {boolean} [opts.reduced]    减少动态效果：只显示各阶段稳定画面
  * @param {number} [opts.ringSpeed]   圆环旋转速度倍率
+ * @param {boolean} [opts.wait=true]  授权 / 身份两步停靠，长按 Enter 才继续（等待不计入 duration）
  */
 async function playBootAnimation(opts = {}) {
   const duration = opts.scale !== undefined
@@ -195,7 +198,8 @@ async function playBootAnimation(opts = {}) {
     out: opts.out,
     duration,
     reduced: opts.reduced,
-    ringSpeed: opts.ringSpeed
+    ringSpeed: opts.ringSpeed,
+    wait: opts.wait !== false
   });
 }
 
