@@ -5,8 +5,8 @@
  * 差分刷新 / 圆环扫描）。本文件只做三件事，不再自己画一帧：
  *
  *   1. 把 `bootScreen(opts)` 接到 `runSplash`，并统一时长口径：
- *      规格原速 13.5 秒；CLI 启动阻塞 13.5 秒太久，默认压到 30%（约 4 秒），
- *      `APICODE_SPLASH_FULL=1` 或 `--splash-full` 播原速，
+ *      规格原速 13.5 秒，默认就按原速完整播放；
+ *      `APICODE_SPLASH_FAST=1` 或 `--splash-fast` 压到 30%（约 4 秒），
  *      `APICODE_SPLASH_DURATION=<秒>` 或 `--splash-duration <秒>` 直接指定总时长。
  *   2. 保留宽度工具（glyphWidth / clipG / clipLine / padTo / padLeftTo / centerIn）——
  *      `src/ui-fx.js` 与 `test-render.js` 依赖它们，且判定口径必须与动画一致。
@@ -22,7 +22,7 @@
  *
  * ── 尺寸门槛 ────────────────────────────────────────────────────────────
  *  splash.js 要求至少 80×30（`MIN_W` / `MIN_H`），低于此尺寸它只会画一行提示。
- *  与其让用户盯着「终端太小」4 秒，不如直接降级成一行纯文本启动，和管道/CI 一致。
+ *  与其让用户盯着「终端太小」十几秒，不如直接降级成一行纯文本启动，和管道/CI 一致。
  */
 
 const { charWidth } = require('./term-width');
@@ -120,7 +120,7 @@ function centerIn(s, cols) {
  * text=状态文案、ghost=耗时与尾注）。开屏换主题不该连带把跳转页也换掉，
  * 所以这里原封不动，只保证六个 key 都在且都是函数。
  *
- * 开屏自己的配色在 splash.js 的 COL 表里（规格要求的白底黑字），与本表无关。
+ * 开屏自己的配色在 splash.js 的 COL 表里（命令行同款黑底浅灰字），与本表无关。
  */
 const C = {
   frame: (s) => `\x1b[38;5;51m${s}\x1b[0m`,   // 亮青 —— 边框、标题
@@ -133,8 +133,11 @@ const C = {
 
 // ─────────────────────────── 时长口径 ───────────────────────────
 
-/** 默认播放规格时长的 30%（13.5s → 约 4s），阶段顺序与占比完全不变 */
-const DEFAULT_SCALE = 0.30;
+/** 默认按规格原速播放（13.5 秒），阶段顺序与占比与规格完全一致 */
+const DEFAULT_SCALE = 1;
+
+/** 快速档：30%（约 4 秒），只想赶紧进主界面时用 */
+const FAST_SCALE = 0.30;
 
 /** 读 `--flag value` / `--flag=value`，返回字符串或 undefined */
 function argValue(name) {
@@ -149,7 +152,7 @@ function argValue(name) {
 /**
  * 解析总时长（秒）。
  *   优先级：显式 duration 参数 > --splash-duration > APICODE_SPLASH_DURATION
- *          > （--splash-full / APICODE_SPLASH_FULL=1 → 13.5）> 4.05
+ *          > （--splash-fast / APICODE_SPLASH_FAST=1 → 4.05）> 13.5
  */
 function resolveDuration(explicit) {
   const num = (v) => {
@@ -164,9 +167,9 @@ function resolveDuration(explicit) {
   const fromEnv = num(process.env.APICODE_SPLASH_DURATION);
   if (fromEnv !== null) return fromEnv;
 
-  const full = process.env.APICODE_SPLASH_FULL === '1'
-    || process.argv.slice(2).includes('--splash-full');
-  return full ? splash.TOTAL : splash.TOTAL * DEFAULT_SCALE;
+  const fast = process.env.APICODE_SPLASH_FAST === '1'
+    || process.argv.slice(2).includes('--splash-fast');
+  return splash.TOTAL * (fast ? FAST_SCALE : DEFAULT_SCALE);
 }
 
 // ─────────────────────────── 播放 ───────────────────────────
@@ -198,7 +201,7 @@ async function playBootAnimation(opts = {}) {
 
 /**
  * 启动开屏：能播动画就播，否则退回一行纯文本降级。
- * 终端小于动画的最低尺寸（80×30）时也走这条降级 —— 比盯着「终端太小」4 秒好。
+ * 终端小于动画的最低尺寸（80×30）时也走这条降级 —— 比盯着「终端太小」十几秒好。
  */
 async function bootScreen(opts = {}) {
   const version = opts.version || '0.0.0';

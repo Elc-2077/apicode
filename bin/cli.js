@@ -107,7 +107,7 @@ startREPL();
 async function startREPL() {
   term.clear();
 
-  // 550W 风格开机动画（非 TTY 或 --no-anim 时自动降级为静态 logo，不阻塞启动）
+  // APICode 开屏动画（非 TTY / --no-anim / 终端小于 80×30 时自动降级为一行纯文本）
   await bootScreen({ version: require('../package.json').version });
 
   // 选择或添加 API 配置

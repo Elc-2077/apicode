@@ -1,6 +1,6 @@
 # api-code-cli
 
-**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、读取图像。现已更新到v1.3.0,代码内容以文件里面的为准，后面标识的和比较有些问题
+**AI 编码助手 CLI** - 类似 Claude Code 的命令行工具，支持读写文件、搜索代码、执行命令、读取图像。现已更新到v1.3.1,代码内容以文件里面的为准，后面标识的和比较有些问题
 
 [![npm version](https://img.shields.io/npm/v/api-code-cli.svg)](https://www.npmjs.com/package/api-code-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -142,12 +142,13 @@ apicode serve
 
 ## 开屏动画
 
-启动 `apicode` 时会播一段《流浪地球》550W 风格的冷青自检序列：标题框（框内是 `apicode` 字标）→ `APICODE` logo 逐行浮现 → 6 条自检项（量子运算核心、行星发动机链路……）进度条跑满后点亮 → 收在版本号上。整段属于观感层，播不播都不影响后续流程。
+启动 `apicode` 时会播一段 13.5 秒的开机序列，配色和终端本身一致 —— 黑底（#0C0C0C）+ 浅灰文字 + 橙色指示点，不另起一层白底，看起来就是同一块终端里多画了几笔几何图形。依次是七个阶段：系统初始化 → 访问授权（`授予访问权限` 按钮）→ 身份资料确认 → 接收访问需求 → 权限读取（多层圆环扫描：外层圆弧逐段描边后持续旋转，中层亮环反向慢转，内层两道细弧最慢，橙色节点依次点亮）→ 品牌欢迎界面 → 进入主界面。整段只属于观感层，播不播都不影响后续流程。
 
-- **跳过**：动画期间按任意键立即结束，`Ctrl+C` 直接退进程（不会因为动画让按键失灵）。
-- **关闭**：`apicode --no-anim`，或环境变量 `APICODE_NO_ANIM=1`。非 TTY（管道、CI、重定向到文件）自动降级为静态 logo + 一行版本号，不会往管道里灌色块。
-- **自适应 + 居中**：≥52 列画外框 + 完整 logo；窄一些退到纯 ASCII 紧凑 logo；再窄就只留一行文字。整块按**最宽元素**算偏移后一起平移（逐行各自居中会把外框、logo、自检表的左右边界错开），终端比内容还窄时自动放弃居中退回贴左，绝不为居中多折一行。所有输出按显示列宽裁剪兜底，永不折行。
-- 实现在 `src/boot-anim.js`；宽度测量用的是该文件自带的 `glyphWidth()`，**不用** `src/term-width.js` 的 `dispWidth`（后者对装饰字形取保守值，会把框线算成两倍宽，原因写在文件头注释里）。
+- **跳过**：动画期间按 `S` / `Q` / `Esc` 立即淡出（约 0.3s），`Ctrl+C` 直接退进程。
+- **关闭**：`apicode --no-anim`，或环境变量 `APICODE_NO_ANIM=1`。非 TTY（管道、CI、重定向到文件）、或终端小于 80×30 时，自动降级为一行 `APICode v<版本> · AI 对话 CLI`，不会往管道里灌色块。
+- **时长**：默认按规格原速 13.5 秒。`--splash-fast` 或 `APICODE_SPLASH_FAST=1` 压到 30%（约 4 秒）；要更精确就用 `--splash-duration <秒>` 或 `APICODE_SPLASH_DURATION=<秒>`（优先级最高）。改各阶段的先后与占比在 `src/splash.js` 的 `TOTAL` 与 `STAGE_AT`，圆环的转速、描边起止、退出时序在 `RING`。
+- **实现**：`src/splash.js` 是动画本体 —— 画面是时间 `T` 的纯函数 `render(T, W, H)`，七个阶段由同一个虚拟时钟推导，不存在互相打架的定时器；圆弧用盲文点阵（U+2800–U+28FF，每格 2×4 点）按极坐标绘制，一帧帧差分刷新。`src/boot-anim.js` 只是适配层：接 `bootScreen()`、统一时长口径、保留 `glyphWidth` / `colors` / `shouldAnimate` 给 `src/ui-fx.js` 复用。整段在备用屏里播放，结束归还主屏，不会在主界面留下行。
+- 宽度测量用的是 `boot-anim.js` 的 `glyphWidth()`，**不用** `src/term-width.js` 的 `dispWidth`（后者对装饰字形取保守值，会把框线算成两倍宽，原因写在文件头注释里）。已在 80×30 ~ 200×60 共 7 种终端尺寸、385 帧上验证零超宽行。
 
 ## 跳转页面：居中 + 载入动画
 

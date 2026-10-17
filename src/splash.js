@@ -3,7 +3,9 @@
 /*
  * APICode 开屏启动动画 · CLI 版
  * ─────────────────────────────────────────────────────────────
- * 零依赖 Node.js 脚本。白色系统界面 · 黑色几何图形 · 橙色状态指示 · 多层圆环扫描。
+ * 零依赖 Node.js 脚本。终端黑界面 · 浅色几何图形 · 橙色状态指示 · 多层圆环扫描。
+ * 配色对齐命令行默认终端（Windows Terminal Campbell：#0C0C0C 底 / 浅灰文字），
+ * 所以整块画面放进终端里看不出「换了一层皮」，只是同一块黑底上多了图形。
  * 纯展示性动画：身份资料、状态值均为演示占位，不构成任何真实的授权或认证。
  *
  * 用法
@@ -36,7 +38,7 @@ const STAGE_AT = [0, 1, 3, 5, 6, 10, 12];
 
 // 圆环：时间、速度全部在这里。角度单位为度，时间单位为秒（设计时间轴上的秒）。
 const RING = {
-  // 外层黑色圆弧：描边进度（线性）。弧段占整圆的比例从 startFrac 画到 endFrac。
+  // 外层主圆弧（原·黑色，黑底后反相为浅色）：描边进度（线性）。弧段占整圆的比例从 startFrac 画到 endFrac。
   draw: { from: 6.5, to: 8.4, startFrac: 0.05, endFrac: 0.86 },
   // 旋转 = degPerSec × travel(T, 起转, 加速结束, 开始减速, 完全停止)
   outer: { degPerSec: 70, spin: [7.2, 7.8, 9.3, 9.95], startAngle: -60 },
@@ -85,14 +87,16 @@ function blend(fg, bg, a) {
   return pack(Math.round(b[0] + (f[0] - b[0]) * a), Math.round(b[1] + (f[1] - b[1]) * a), Math.round(b[2] + (f[2] - b[2]) * a));
 }
 const COL = {
-  bg: pack(240, 240, 237),
-  white: pack(255, 255, 255),
-  hair: pack(224, 224, 220),
-  line: pack(204, 204, 200),
-  gray: pack(160, 160, 156),
-  mid: pack(108, 108, 106),
-  ink: pack(18, 18, 18),
-  orange: pack(255, 98, 0),
+  // 与命令行默认终端同一套：黑底 + 浅灰文字。整张画面按「深 → 浅」重排，
+  // 原先的 ink（最暗）现在是最亮 —— 所有绘制都按 alpha 与 bg 混合，换底自动反向。
+  bg: pack(12, 12, 12),       // Campbell 的 #0C0C0C
+  white: pack(255, 255, 255), // 白色圆环 / 品牌块上的反白字
+  hair: pack(32, 32, 32),     // 外框、极淡分隔线
+  line: pack(56, 56, 56),     // 常规分隔线
+  gray: pack(100, 100, 100),  // 次要文字
+  mid: pack(150, 150, 150),   // 英文副标题、中等强调
+  ink: pack(232, 232, 232),   // 主文字、浅色圆弧（原·黑色几何，换黑底后反相）
+  orange: pack(255, 110, 20), // 真彩下是橙；256 色兜底时落到 208（亮橙），黑底上才够醒目
 };
 
 /* 字符宽度（中日韩全角占 2 列） */
@@ -241,7 +245,7 @@ class Canvas {
 }
 
 /* ═════════════════════ 5. APICode 品牌标志 ═════════════════════
- * 抽象字母 A：两条黑色斜腿，横梁是一小段悬浮的橙色线；两侧各有一个细黑色方括号（数据通道）。
+ * 抽象字母 A：两条浅色斜腿，横梁是一小段悬浮的橙色线；两侧各有一个细浅色方括号（数据通道）。
  * 全部由点阵线段构成，p 为描边进度，a 为透明度。
  */
 function drawLogo(cv, cx, cy, s, p, a, bg = COL.bg) {
@@ -474,7 +478,7 @@ function scanner(S, cv, G, T, ctx) {
     }
   }
 
-  // 外层：粗黑圆弧，线性描边，随后匀速旋转
+  // 外层：粗浅色圆弧（COL.ink），线性描边，随后匀速旋转
   const d = RING.draw;
   const frac = lerp(d.startFrac, d.endFrac, ramp(T, d.from, d.to - d.from));
   const rotO = RING.outer.startAngle + RING.outer.degPerSec * sp * travel(T, ...RING.outer.spin);
@@ -484,7 +488,7 @@ function scanner(S, cv, G, T, ctx) {
   const head = tail + sweep;
   if (T >= d.from) cv.arc(cx, cy, R, tail, sweep, 3, COL.ink, 3);
 
-  // 中层：白色圆弧（白底 + 两侧深灰细线），缓慢反向旋转
+  // 中层：白色圆弧（白底 + 两侧灰色细线），在深色背景上是一条亮环，缓慢反向旋转
   const mf = easeOut(ramp(T, ...[RING.mid.fade[0], RING.mid.fade[1] - RING.mid.fade[0]])) * (1 - ramp(T, X.mid[0], X.mid[1]));
   const rotM = RING.mid.degPerSec * sp * travel(T, ...RING.mid.spin);
   const rm = 0.84 * R;
@@ -498,7 +502,7 @@ function scanner(S, cv, G, T, ctx) {
     }
   }
 
-  // 内层：更细的黑色圆弧，2–3 段，速度明显慢于外层
+  // 内层：更细的浅色圆弧，2–3 段，速度明显慢于外层
   const inF = easeOut(ramp(T, RING.inner.fade[0], RING.inner.fade[1] - RING.inner.fade[0])) * (1 - ramp(T, X.inner[0], X.inner[1]));
   const rotI1 = RING.inner.degPerSec[0] * sp * travel(T, ...RING.inner.spin);
   const rotI2 = RING.inner.degPerSec[1] * sp * travel(T, ...RING.inner.spin);
@@ -561,12 +565,13 @@ function welcome(S, cv, G, T) {
   // WELCOME TO
   let v = vis(T, 10.95, 0.4);
   S.textC(cx, y0 + v.dy, fitSpaced('WELCOME TO', 40), COL.ink, { a: v.a }, G.W - 3);
-  // 黑色矩形品牌区，由略小的尺寸平滑放大
+  // 品牌矩形区，由略小的尺寸平滑放大
   const bw = Math.min(40, G.W - 20), sc = lerp(0.72, 1, easeOut(ramp(T, 11.2, 0.45)));
   const ba = easeOut(ramp(T, 11.2, 0.35)), w = Math.max(8, Math.round(bw * sc)), bx = Math.floor(cx - w / 2), by = y0 + 2;
+  // 品牌块：黑底上是一块亮色实心带（比背景更亮而不是更暗），块内文字用背景色反白
   const fillC = blend(COL.ink, COL.bg, ba);
   S.fill(bx, by, w, 3, fillC);
-  if (ba > 0.3 && sc > 0.9) S.textC(cx, by + 1, 'APICODE HARNESS', COL.white, { a: ramp(T, 11.45, 0.3), bold: true, bg: fillC });
+  if (ba > 0.3 && sc > 0.9) S.textC(cx, by + 1, 'APICODE HARNESS', COL.bg, { a: ramp(T, 11.45, 0.3), bold: true, bg: fillC });
   // Logo
   const ly = by + 3 + 1;
   const lp = ramp(T, 11.55, 0.5);
