@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-10-22
+
+### Added
+- 🔊 **开屏动画加入英文机械女声播报**: 四个关键节点各配一句冷调女声 —— `需要访问许可`（1.00s）*Access permission required.*、`身份资料确认`（3.40s）*Identity verification in progress.*、`开始读取权限`（6.15s）*Permission check in progress.*、`欢迎访问`（12.10s）*Welcome to APICode.*。
+  - **语音跟随虚拟时钟 `vt`**，不是真实时间：长按 Enter 停靠在授权/身份两步时，语音不会提前播；按 `S`/`Q`/`Esc` 跳过时也不会补放错位的句子。
+  - **常驻播放器**：动画开始时起一个 PowerShell 子进程（`System.Media.SoundPlayer`，走 winmm 不依赖 .NET 音频栈），stdin 逐行接收 WAV 路径。首句付一次约 0.7s 启动成本，之后毫秒级响应，四句都能与画面同帧。子进程起不来时自动回退到「每句单进程」，最差也能出声。
+  - **跨平台**：Windows 走 PowerShell，macOS 走 `afplay`，Linux 走 `paplay` / `aplay` / `ffplay`；全都失败则静默忽略，绝不影响启动。
+  - **静音开关**：`APICODE_SPLASH_VOICE=0`（或 `off` / `false`）关闭；`--reduced` 模式下自动不播。
+- 📦 **语音资源 `src/assets/voice/*.wav`**: 四句共约 446KB，22.05kHz / 单声道 / 16bit PCM，随包发布。
+- 🛠️ **合成链路**（离线可复现，不依赖在线 TTS）: Piper 神经语音 `en_US-amy`（原声基频 208Hz）合成 → ffmpeg 处理为机械质感 —— 轻降调（-0.35 半音，实测基频 190–216Hz 落在女声区间）、`acrusher` 9bit 量化、30Hz 颤调制、9ms 金属短反射、5:1 压缩、响度归一化到 -17 LUFS。
+
+### Fixed
+- ⏱️ **`identity` 语音时长适配阶段窗口**: 该句从 3.40s 开始，窗口到 6.15s 只有 2.75s，初版 3.39s 会和下一句叠音。单独把这一句的 `length-scale` 收到 1.0，现为 2.65s。
+
 ## [1.4.0] - 2026-10-18
 
 ### Added
