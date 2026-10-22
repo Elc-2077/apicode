@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2] - 2026-10-22
+
+### Fixed
+- 🔇 **开屏最后一句播报总是听不全**: `welcome` 在虚拟时钟 12.1s 触发，而动画走到 `TOTAL` 就 `cleanup()` 并 kill 播放器，留给它的只有 1.4~1.6 秒真实时间，1.9 秒的句子必然被掐断。现在 `splash-voice` 在读 WAV 头时就记下每句播完的真实时刻（新增 `remaining()`），动画到结尾若还没播完，就停在欢迎画面等它自然结束再退出；按 `S`/`Q`/`Esc` 跳过时仍然立即静音，不等。
+
+### Changed
+- 🏃 **语速回调到 atempo 1.05**: 1.5.1 的 1.12 倍听感偏快，回调一档。用 `atempo`（纯时间缩放、不动音高）而非继续压 `length-scale`，避免合成器在极短时值下发紧、粘连。四句现为 access 1.97s、identity 2.24s、permission 1.97s、welcome 1.91s，基频仍在 195–220Hz。
+
 ## [1.5.0] - 2026-10-22
 
 ### Added
