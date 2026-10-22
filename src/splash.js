@@ -29,6 +29,7 @@
 
 const os = require('os');
 const { spawn } = require('child_process');
+const { createVoicePlayer } = require('./splash-voice');
 
 /* ═════════════════════ 1. 可调参数 ═════════════════════ */
 
@@ -785,6 +786,8 @@ function runSplash(opts = {}) {
     let W = out.columns, H = out.rows, prev = null, vt = 0, skipAt = null, done = false;
     let holdCharge = -1;   // 当前停靠点的长按蓄力 0..1；-1 表示不在停靠点
     const holds = makeHolds(opts.wait && inp.isTTY);   // stdin 不是 TTY 时没人能按键：不停靠
+    // 机械女声：设计时间轴上的四个节点各播一句；reduced / voice:false 时关闭
+    const voice = createVoicePlayer({ enabled: opts.voice !== false && !reduced });
     let ready = !opts.ready; if (opts.ready) Promise.resolve(opts.ready).then(() => { ready = true; }, () => { ready = true; });
     const REDUCED = [0.95, 2.7, 4.7, 5.95, 9.9, 12.4];
     let last = process.hrtime.bigint(), elapsed = 0;
@@ -794,6 +797,7 @@ function runSplash(opts = {}) {
     function cleanup() {
       if (done) return; done = true;
       if (timer) clearInterval(timer);
+      try { voice.stop(); } catch (e) { /* ignore */ }
       try { inp.setRawMode && inp.isTTY && inp.setRawMode(false); } catch (e) { /* ignore */ }
       inp.pause(); inp.removeListener('data', onKey);
       write('\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l');
@@ -855,7 +859,8 @@ function runSplash(opts = {}) {
         if (!ready && vt > 12.5) vt = 12.5; // 真实初始化未完成：停在欢迎画面
       }
       let fade = 0;
-      if (skipAt !== null) { fade = clamp((performance.now() - skipAt) / 300); if (fade >= 1) return finish(); }
+      if (skipAt !== null) { voice.stop(); fade = clamp((performance.now() - skipAt) / 300); if (fade >= 1) return finish(); }
+      else voice.tick(vt);   // 语音跟随虚拟时钟：停靠等待时不会错位，跳过时不再补放
       if (vt >= TOTAL) return finish();
 
       let S;
