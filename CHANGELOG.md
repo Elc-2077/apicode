@@ -14,7 +14,10 @@ All notable changes to this project will be documented in this file.
 - 🛠️ **合成链路**（离线可复现，不依赖在线 TTS）: Piper 神经语音 `en_US-amy`（原声基频 208Hz）合成 → ffmpeg 处理为机械质感 —— 轻降调（-0.35 半音，实测基频 190–216Hz 落在女声区间）、`acrusher` 9bit 量化、30Hz 颤调制、9ms 金属短反射、5:1 压缩、响度归一化到 -17 LUFS。
 
 ### Fixed
-- ⏱️ **`identity` 语音时长适配阶段窗口**: 该句从 3.40s 开始，窗口到 6.15s 只有 2.75s，初版 3.39s 会和下一句叠音。单独把这一句的 `length-scale` 收到 1.0，现为 2.65s。
+- ⏱️ **`identity` 语音时长适配阶段窗口**: 该句从 3.40s 开始，窗口到 6.15s 只有 2.75s，初版 3.39s 会和下一句叠音。单独把这一句的 `length-scale` 收到 0.88，现为 2.45s。
+
+### Changed
+- 🏃 **播报语速整体加快**: 四句 `length-scale` 从 1.30 收到 1.0（identity 单独 0.80），实际时长 access 2.47s→2.06s、identity 2.65s→2.34s、permission 2.57s→2.06s、welcome 2.40s→1.99s。基频与音色参数未动，实测仍在 188–218Hz 女声区间；四句结束时间分别为 3.06s / 5.74s / 8.21s / 14.09s，均在阶段窗口内、互不叠音。
 
 ## [1.4.0] - 2026-10-18
 
