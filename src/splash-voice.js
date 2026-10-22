@@ -88,8 +88,23 @@ function playOnce(full) {
 }
 
 /**
+ * 读 WAV 头算时长（秒）。只认 PCM：byteRate 在偏移 28。
+ * 读不出来返回 0，调用方按 0 处理（不等）。
+ */
+function wavSeconds(full) {
+  try {
+    const b = fs.readFileSync(full);
+    if (b.length < 44 || b.toString('ascii', 0, 4) !== 'RIFF') return 0;
+    const byteRate = b.readUInt32LE(28);
+    if (!byteRate) return 0;
+    return (b.length - 44) / byteRate;
+  } catch (e) { return 0; }
+}
+
+/**
  * 创建语音调度器。动画每帧调用 tick(vt)。
  * 时间点只触发一次；跳过（S/Q/Esc）时调用方 stop()，已排队的不再补放。
+ * remaining() 给出最后一句还剩多少秒没播完，供动画收尾时留白。
  */
 function createVoicePlayer(opts = {}) {
   const enabled = voiceEnabled(opts) && CUES.every((c) => fs.existsSync(path.join(VOICE_DIR, c.file)));
@@ -97,6 +112,7 @@ function createVoicePlayer(opts = {}) {
   const live = new Set();
   let player = null;
   let playerDead = false;
+  let busyUntil = 0;   // 最后一句播完的真实时刻（performance.now 基准）
 
   if (enabled && process.platform === 'win32') {
     player = spawnWindowsPlayer();
@@ -107,6 +123,9 @@ function createVoicePlayer(opts = {}) {
 
   function speak(file) {
     const full = path.join(VOICE_DIR, file);
+    // 记录这句播完的时刻：常驻播放器是异步 Play()，动画收尾时靠它决定要不要多等
+    const secs = wavSeconds(full);
+    if (secs > 0) busyUntil = Math.max(busyUntil, performance.now() + secs * 1000);
     if (player && !playerDead) {
       try { player.stdin.write(full + '\n'); return; } catch (e) { /* 退回单次播放 */ }
     }
@@ -131,9 +150,16 @@ function createVoicePlayer(opts = {}) {
     if (player) { try { player.stdin.end(); } catch (e) { /* ignore */ } try { player.kill(); } catch (e) { /* ignore */ } player = null; }
     for (const p of live) { try { p.kill(); } catch (e) { /* ignore */ } }
     live.clear();
+    busyUntil = 0;
   }
 
-  return { tick, stop, enabled, cues: CUES, played: () => [...fired] };
+  /** 最后一句还剩多少秒没播完（0 表示已播完或没有在播）。 */
+  function remaining() {
+    if (!enabled) return 0;
+    return Math.max(0, (busyUntil - performance.now()) / 1000);
+  }
+
+  return { tick, stop, remaining, enabled, cues: CUES, played: () => [...fired] };
 }
 
 module.exports = { createVoicePlayer, playOnce, CUES, VOICE_DIR, voiceEnabled };

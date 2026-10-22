@@ -861,7 +861,11 @@ function runSplash(opts = {}) {
       let fade = 0;
       if (skipAt !== null) { voice.stop(); fade = clamp((performance.now() - skipAt) / 300); if (fade >= 1) return finish(); }
       else voice.tick(vt);   // 语音跟随虚拟时钟：停靠等待时不会错位，跳过时不再补放
-      if (vt >= TOTAL) return finish();
+      if (vt >= TOTAL) {
+        // 最后一句还没播完就停在欢迎画面等它（最多等一整句的长度），否则会被 cleanup 掐断
+        if (skipAt === null && voice.remaining() > 0.02) return;
+        return finish();
+      }
 
       let S;
       if (W < MIN_W || H < MIN_H) {
